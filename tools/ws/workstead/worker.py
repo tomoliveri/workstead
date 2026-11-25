@@ -1171,7 +1171,7 @@ def consent_text(ctx: Ctx) -> str:
     need = needed_installs(ctx)
     lines += ["", "**To install now:** " + (", ".join(need) + "." if need else "nothing, this machine is ready.")]
     lines += ["", "Progress shows on the pinned *Workstead board* issue, and every change goes through review "
-              "before it merges.", "", "**Shall I start?**"]
+              + "before it merges.", "", "**Shall I start?**"]
     return "\n".join(lines)
 
 
