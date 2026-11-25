@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: tools/ws
@@ -71,7 +71,7 @@ jobs:
       # 5,000+ requests an hour (docs/scaling.md). Unset vars = GITHUB_TOKEN.
       - id: app
         if: vars.WS_APP_ID != ''
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.WS_APP_ID }}
           private-key: ${{ secrets.WS_APP_PRIVATE_KEY }}

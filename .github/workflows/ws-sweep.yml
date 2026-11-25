@@ -24,13 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: tools/ws
           persist-credentials: false
       - id: app
         if: vars.WS_APP_ID != ''
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ vars.WS_APP_ID }}
           private-key: ${{ secrets.WS_APP_PRIVATE_KEY }}
