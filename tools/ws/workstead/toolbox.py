@@ -470,7 +470,7 @@ def _http(url: str, limit: int = 2_000_000) -> bytes:
     return data
 
 
-def trusted_sources(cfg: Dict[str, Any], own_repo: str, upstream: str = "") -> List[str]:
+def source_repos(cfg: Dict[str, Any], own_repo: str, upstream: str = "") -> List[str]:
     out = [own_repo] if own_repo else []
     for r in ([upstream] if upstream else []) + list(cfg["toolbox"]["sources"]):
         if r and r not in out:
@@ -721,7 +721,7 @@ def cmd_tools(ctx, args, home: Path) -> int:
             print(f"No tools in {cfg['toolbox']['path']} yet. ./ws tools scan suggests some.")
         return 1 if any(r["status"] != "ok" for r in rows) else 0
     upstream = cfg["give_back"]["upstream"] or ""
-    sources = trusted_sources(cfg, ctx.repo, upstream)
+    sources = source_repos(cfg, ctx.repo, upstream)
     if what == "find":
         q = (args.paths or [""])[0].lower()
         rows = []
@@ -733,7 +733,7 @@ def cmd_tools(ctx, args, home: Path) -> int:
                 continue
             for name, t in sorted(rm["tools"].items()):
                 rows.append({"repo": repo, "name": name, "version": t["version"], "summary": t.get("summary", ""),
-                             "trusted": True})
+                             "listed": True})
         if cfg["driver"] == "nostr" and not args.offline:
             try:
                 from .driver import relays_for
@@ -746,7 +746,7 @@ def cmd_tools(ctx, args, home: Path) -> int:
                 known = {(r["repo"], r["name"]) for r in rows}
                 for r in releases(evs):
                     if (r["repo"], r["name"]) not in known:
-                        rows.append({**r, "trusted": r["repo"] in sources})
+                        rows.append({**r, "listed": r["repo"] in sources})
             except Exception as e:  # relays unreachable: GitHub sources still listed
                 print(f"  (relays unavailable: {e})", file=sys.stderr)
         rows = [r for r in rows if not q or q in r["name"] or q in r["summary"].lower()]
@@ -754,7 +754,7 @@ def cmd_tools(ctx, args, home: Path) -> int:
             print(json.dumps(rows, indent=2))
             return 0
         for r in rows:
-            mark = "" if r["trusted"] else "  [not in toolbox.sources]"
+            mark = "" if r["listed"] else "  [not in toolbox.sources]"
             print(f"  {r['repo']}  {r['name']} {r['version']}  {r['summary']}{mark}")
         if not rows:
             print("No shared tools found.")

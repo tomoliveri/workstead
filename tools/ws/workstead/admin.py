@@ -217,9 +217,9 @@ def relay_init(root: Path, gh, cfg: Dict[str, Any]) -> None:
             r = subprocess.run(["gh", "secret", "set", "WS_NOSTR_KEY", "--repo", gh.repo], input=sk.hex(),
                                capture_output=True, text=True, timeout=60)
         except OSError:
-            raise GitHubError("needs the GitHub CLI (gh) to store the gate key as a secret") from None
+            raise GitHubError(0, "needs the GitHub CLI (gh) to store the gate key as a secret") from None
         if r.returncode != 0:
-            raise GitHubError(f"gh secret set failed: {r.stderr.strip()[:160]}")
+            raise GitHubError(r.returncode, f"gh secret set failed: {r.stderr.strip()[:160]}")
         pubs.append(schnorr.npub(pk))
     _, mine = load_or_create_key(_P.home() / ".workstead")
     mine_npub = schnorr.npub(bytes.fromhex(mine))

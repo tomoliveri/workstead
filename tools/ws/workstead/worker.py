@@ -1209,7 +1209,7 @@ def cmd_join(ctx: Ctx, args) -> int:
     except OSError:
         pass  # already gone, or never created: nothing to undo
     print(json.dumps({"status": "joined", "login": ctx.me, "node": p["node"], "features": p["features"],
-                      "trusted_reviewer": ctx.trusted, "give_back": p["give_back"] and ctx.cfg["give_back"]["enabled"],
+                      "can_review": bool(ctx.trusted), "give_back": p["give_back"] and ctx.cfg["give_back"]["enabled"],
                       "next_command": "ws next"}))
     return 0
 
