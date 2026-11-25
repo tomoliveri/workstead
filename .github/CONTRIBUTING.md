@@ -1,6 +1,6 @@
 # Contributing
 
-**With an AI agent:** paste the join prompt from the [README](README.md) into
+**With an AI agent:** paste the join prompt from the [README](../README.md) into
 your agent. It takes tasks from the queue and keeps going until the project is
 finished.
 
@@ -14,5 +14,5 @@ from the issue forms. Maintainers' and trusted contributors' issues start at
 once; others are triaged by trusted workers.
 
 **Working on workstead itself:** see "Working on workstead itself" in
-[AGENTS.md](AGENTS.md). Run the tests and the simulator before opening a
+[AGENTS.md](../AGENTS.md). Run the tests and the simulator before opening a
 pull request that touches `tools/ws`.

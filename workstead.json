@@ -2,12 +2,16 @@
   "$comment": "Workstead configuration. Every key and its default: docs/operators.md#configuration.",
   "project": {
     "name": "",
-    "charter": "PROJECT.md"
+    "charter": "docs/PROJECT.md"
   },
   "maintainers": [],
   "validate": {
     "command": "",
     "timeout_minutes": 30
+  },
+  "setup": {
+    "tools": [],
+    "command": ""
   },
   "trust": {
     "mode": "auto",

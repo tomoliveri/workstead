@@ -36,12 +36,7 @@ on:
         default: ""
 
 permissions:
-  contents: write        # merge approved pull requests
-  issues: write          # labels, assignees, status comments, new tasks
-  pull-requests: write
-  actions: write         # workflow_dispatch for cross-issue effects
-  checks: read
-  statuses: read
+  contents: read
 
 concurrency:
   group: ws-${{ github.event.issue.number || github.event.pull_request.number || inputs.issue || github.run_id }}
@@ -49,6 +44,13 @@ concurrency:
 
 jobs:
   workstead-queue:
+    permissions:
+      contents: write        # merge approved pull requests
+      issues: write          # labels, assignees, status comments, new tasks
+      pull-requests: write
+      actions: write         # workflow_dispatch for cross-issue effects
+      checks: read
+      statuses: read
     # Skip runs that can't matter, so a large fleet doesn't burn runner time:
     # only comments that start with a command, only issues that are ours.
     if: >-
@@ -62,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           ref: ${{ github.event.repository.default_branch }}
           sparse-checkout: tools/ws
@@ -71,7 +73,7 @@ jobs:
       # 5,000+ requests an hour (docs/scaling.md). Unset vars = GITHUB_TOKEN.
       - id: app
         if: vars.WS_APP_ID != ''
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
           app-id: ${{ vars.WS_APP_ID }}
           private-key: ${{ secrets.WS_APP_PRIVATE_KEY }}
@@ -79,3 +81,5 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
           WS_BOT_LOGIN: ${{ vars.WS_BOT_LOGIN }}
+          # relay mode: the gate key publishes ready task issues to the relays (bridge.py)
+          WS_NOSTR_KEY: ${{ secrets.WS_NOSTR_KEY }}

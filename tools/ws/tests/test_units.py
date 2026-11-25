@@ -233,6 +233,25 @@ class Worker(unittest.TestCase):
             W.parse_ref("x/y#", "a/b")
 
 
+class CodeOwners(unittest.TestCase):
+    def test_rendered_per_repository_and_never_leaks_the_template_owner(self):
+        import tempfile
+        from workstead import admin
+        root = Path(tempfile.mkdtemp())
+        self.assertTrue(admin.render_codeowners(root, {"owner": "alice", "owner_type": "User"}, CFG))
+        text = (root / ".github" / "CODEOWNERS").read_text()
+        self.assertIn("/tools/ws/ @alice", text)
+        self.assertFalse(admin.render_codeowners(root, {"owner": "alice", "owner_type": "User"}, CFG))
+        # An organisation without listed maintainers: the rendered file goes.
+        self.assertTrue(admin.render_codeowners(root, {"owner": "acme", "owner_type": "Organization"}, CFG))
+        self.assertFalse((root / ".github" / "CODEOWNERS").exists())
+        org = C.load(data={"repo": "acme/x", "maintainers": ["bob", "carol"]})
+        admin.render_codeowners(root, {"owner": "acme", "owner_type": "Organization"}, org)
+        self.assertIn("@bob @carol", (root / ".github" / "CODEOWNERS").read_text())
+        (root / ".github" / "CODEOWNERS").write_text("* @someone\n")  # hand-written: left alone
+        self.assertFalse(admin.render_codeowners(root, {"owner": "alice", "owner_type": "User"}, CFG))
+
+
 class Simulation(unittest.TestCase):
     def test_small_fleet_finishes_without_duplicate_work(self):
         from workstead.sim import Sim

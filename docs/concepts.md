@@ -130,3 +130,15 @@ least `min_owed_hours`), `ws next` serves one task from the upstream Workstead
 repository through the same protocol, in a separate clone. At 0.1% that's
 about one hour per thousand. The consent message names it, and
 `ws join --no-give-back` turns it off for one worker.
+
+## Fleet learnings
+
+Give-back is also how Workstead learns from the fleets that use it.
+
+1. **Every fleet measures itself.** Each sweep compares the queue with the previous sweep and counts what happened: leases started and requeued, actual lease hours against estimates, rework and its cause (review, failing checks or conflicts), held tasks by reason, plan sizes, triage outcomes, throughput. The counts are kept per day for 28 days, and the sweep publishes a **report** (`learnings.json` on the board branch) with rates, medians, the config knobs in use, and the fleet's *weak spots*: topics whose metric crosses a threshold (`leases`, `estimation`, `review`, `validation`, `conflicts`, `held`, `triage`, `planning`).
+2. **Give-back carries it upstream.** When `give_back.learnings` is on (the default once give-back is enabled), a worker's give-back turn first posts the fleet's report to the upstream repository's **Fleet learnings** issue, at most weekly.
+3. **Upstream trusts nothing.** The upstream queue checks each report against a fixed schema (`tools/ws/workstead/learnings.py`): only known metric names with numbers in range, known categories, and a random 16-character project id. Anything else is deleted. One report per fleet is kept, for 90 days.
+4. **Patterns become work.** The upstream sweep computes the median and 75th percentile of each metric across fleets. When a median crosses a threshold across at least three fleets, it opens a research task on that topic (once per 30 days), with the aggregate table attached.
+5. **Give-back goes where it helps the giver.** Upstream tasks carry `topics`. A give-back worker's scoring adds an `affinity` bonus to upstream tasks matching its own fleet's weak spots, so fleets with expiring leases help fix lease expiry.
+
+What a report never contains: repository names, logins, issue titles or bodies, code, or free text. The project id is random, but for a public repository it's also visible in that repository's own `queue.json`, so a public fleet's report can be linked to it; a private fleet's can't. `ws learnings` prints the exact report.

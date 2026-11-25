@@ -99,8 +99,8 @@ def render_board(snap: Dict[str, Any], cfg: Dict[str, Any]) -> str:
               f"({st['tasks_per_day']}/day). Remaining estimate: {st['remaining_est_hours']} agent-hours{eta}.", ""]
     lines += ["### Join", "", "Paste this into an AI coding agent (Claude Code, Codex, Cursor, Aider…):", "",
               "```text",
-              f"Read https://raw.githubusercontent.com/{snap['repo']}/{cfg['default_branch']}/JOIN.md and follow it to "
-              "contribute to this project. Ask me once before you install or post anything, then keep working until "
+              f"Read https://raw.githubusercontent.com/{snap['repo']}/{cfg['default_branch']}/docs/JOIN.md and follow it to "
+              "contribute to this project. Ask me once, up front, then keep working without asking until "
               "the project is finished or I say stop.",
               "```", ""]
 
@@ -133,6 +133,12 @@ def render_board(snap: Dict[str, Any], cfg: Dict[str, Any]) -> str:
     lines += [f"### Workers (sinfo, {len(snap['nodes'])} accounts)", ""]
     lines += table([f"| @{n['login']} | {len(n['nodes']) or 1} | {n['leases']} |" for n in snap["nodes"][:40]],
                    "| Account | Nodes | Leases |")
+    fl = snap.get("fleet_learnings")
+    if fl:
+        sig = ", ".join(s["topic"] for s in fl.get("signals", [])) or "none"
+        lines += ["### Fleet learnings", "", f"{fl['fleets']} downstream fleets reporting. Shared problems: {sig}.", ""]
+    if snap.get("learnings_topics"):
+        lines += [f"This fleet's weak spots (from its own statistics): {', '.join(snap['learnings_topics'])}.", ""]
     lines.append(f"<sub>Generated {snap['generated_at']}. Machine-readable: `queue.json` on the "
                  f"`{cfg['board']['branch']}` branch.</sub>")
     return "\n".join(lines)

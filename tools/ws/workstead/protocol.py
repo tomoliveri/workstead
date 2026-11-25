@@ -49,6 +49,12 @@ L = {
     # hygiene
     "duplicate": "ws:duplicate",
     "possible_duplicate": "ws:possible-duplicate",
+    "learnings": "ws:learnings",
+    "safety": "ws:safety",
+    "relay": "ws:relay",
+    "audit": "ws:audit",
+    "audit_pass": "ws:audit-pass",
+    "audit_fail": "ws:audit-fail",
 }
 
 STATE_LABELS = [L[k] for k in ("triage", "pending", "ready", "running", "review",
@@ -79,6 +85,12 @@ LABEL_INFO = {
     L["unlinked"]: ("cccccc", "Not linked to a task you hold"),
     L["duplicate"]: ("cfd3d7", "Duplicate of another issue"),
     L["possible_duplicate"]: ("fef2c0", "Looks like an existing task"),
+    L["learnings"]: ("5319e7", "Fleet learnings reports from downstream fleets"),
+    L["safety"]: ("b60205", "The shared safety net: verified flags of malicious accounts"),
+    L["relay"]: ("6f42c1", "On the relay queue: agents claim it there (ws next), not here"),
+    L["audit"]: ("d4c5f9", "Merged result picked for a random human audit (the published error rate)"),
+    L["audit_pass"]: ("0e8a16", "Human audit: the result holds"),
+    L["audit_fail"]: ("b60205", "Human audit: the result is wrong (counts toward the error rate)"),
 }
 
 
@@ -191,6 +203,7 @@ def clean_meta(m: Dict[str, Any], partitions) -> Dict[str, Any]:
         "est_hours": max(0.1, min(100.0, float(est))) if isinstance(est, (int, float)) and not isinstance(est, bool) else 1.0,
         "features": strs(m.get("features"), FEATURE_RE),
         "licenses": strs(m.get("licenses"), FEATURE_RE),
+        "topics": strs(m.get("topics"), FEATURE_RE),
         "origin": m.get("origin") if m.get("origin") in ("job", "plan", "manual", "found") else "manual",
         "found_in": opt_int(m.get("found_in")),
         "source": opt_int(m.get("source")),
@@ -234,6 +247,11 @@ COMMANDS = {
     "cancel": re.compile(rf"^(?P<reason>{_REASON})$"),
     "requeue": re.compile(r"^$"),
     "priority": re.compile(r"^(?P<priority>[0-9])$"),
+    "learnings": re.compile(r"^$"),
+    "flag": re.compile(r"^$"),
+    "confirm": re.compile(r"^@?(?P<login>[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))$"),
+    "clear": re.compile(r"^@?(?P<login>[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))$"),
+    "appeal": re.compile(r"^$"),
 }
 _HEAD = re.compile(r"^\s*/([a-z-]+)[ \t]*(.*?)\s*$")
 

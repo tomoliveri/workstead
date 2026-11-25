@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 API = os.environ.get("GITHUB_API_URL", "https://api.github.com")
 UA = "workstead/1"
@@ -30,6 +30,7 @@ def tls_context() -> ssl.SSLContext:
     run, so fall back to the operating system's bundle. Verification stays on.
     """
     ctx = ssl.create_default_context()
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     paths = ssl.get_default_verify_paths()
     if not any(p and os.path.exists(p) for p in (paths.cafile, paths.capath)) or os.environ.get("SSL_CERT_FILE"):
         for f in (os.environ.get("SSL_CERT_FILE"), "/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt",
@@ -104,7 +105,9 @@ def _pr(d: Dict[str, Any]) -> Dict[str, Any]:
             "base_ref": (d.get("base") or {}).get("ref"), "mergeable": d.get("mergeable"),
             "labels": [x["name"] for x in d.get("labels", [])],
             "assignees": [a["login"] for a in d.get("assignees") or []],
-            "created_at": d.get("created_at"), "updated_at": d.get("updated_at")}
+            "created_at": d.get("created_at"), "updated_at": d.get("updated_at"),
+            "additions": d.get("additions") or 0, "deletions": d.get("deletions") or 0,
+            "changed_files": d.get("changed_files") or 0}
 
 
 class GitHub:
@@ -238,11 +241,16 @@ class GitHub:
     def me(self) -> str:
         return self.request("GET", "/user")["login"]
 
+    def branch_sha(self, branch: str) -> str:
+        return self.request("GET", f"{self.r}/commits/{branch}")["sha"]
+
     def repo_info(self) -> Dict[str, Any]:
         d = self.request("GET", self.r)
         return {"private": d.get("private", False), "default_branch": d.get("default_branch", "main"),
                 "can_push": bool((d.get("permissions") or {}).get("push")), "fork": d.get("fork", False),
                 "template": (d.get("template_repository") or {}).get("full_name"),
+                "owner": (d.get("owner") or {}).get("login"), "owner_type": (d.get("owner") or {}).get("type"),
+                "description": d.get("description") or "",
                 "parent": (d.get("parent") or {}).get("full_name")}
 
     def permission(self, login: str) -> str:
@@ -364,6 +372,33 @@ class GitHub:
 
     def pr_files(self, n: int) -> List[str]:
         return [f["filename"] for f in self.paginate(f"{self.r}/pulls/{n}/files?", limit=3000)]
+
+    def pr_patches(self, n: int) -> Dict[str, str]:
+        """{file: unified diff hunk text} (GitHub omits the text for binary or huge files)."""
+        return {f["filename"]: f.get("patch") or "" for f in self.paginate(f"{self.r}/pulls/{n}/files?", limit=3000)}
+
+    # --- other repositories (safety-net verification) ---------------------------
+
+    def repo_owner(self, full: str) -> Tuple[str, str]:
+        d = self.request("GET", f"/repos/{full}")
+        if d.get("private"):
+            raise GitHubError(403, "private repository", full)
+        return d["owner"]["login"], d["owner"]["type"]
+
+    def public_member(self, org: str, login: str) -> bool:
+        try:
+            self.request("GET", f"/orgs/{org}/public_members/{login}")
+            return True
+        except GitHubError:
+            return False
+
+    def foreign_author(self, full: str, n: int) -> str:
+        return (self.request("GET", f"/repos/{full}/issues/{n}").get("user") or {}).get("login", "")
+
+    def pr_reviews(self, n: int) -> List[Dict[str, Any]]:
+        """Native GitHub reviews: [{login, state, sha}]."""
+        return [{"login": (r.get("user") or {}).get("login", ""), "state": r.get("state"), "sha": r.get("commit_id")}
+                for r in self.paginate(f"{self.r}/pulls/{n}/reviews?", limit=300)]
 
     def prs_for_sha(self, sha: str) -> List[int]:
         try:

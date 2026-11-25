@@ -156,6 +156,18 @@ class CliFlow(unittest.TestCase):
         self.assertEqual(len(self.r.children(job)), 7)
         self.assertEqual(self.r.state(job)["status"], "split")
 
+    def test_declined_claim_reports_the_reason(self):
+        t = self.r.task("Mine to do")
+        self.r.say("alice", t, "/claim")
+        pr = self.r.open_pr("alice", t)
+        c = self.ctx()
+        self.run_cmd(W.cmd_join, c, confirmed=True, node="n", features=None, partitions=None, max_hours=None,
+                     no_give_back=False)
+        code, out = self.run_cmd(W.cmd_claim, c, ref=str(pr), node=None, timeout=5)
+        self.assertEqual(code, W.EXIT_LOST)
+        self.assertEqual(json.loads(out)["status"], "declined")
+        self.assertIn("own", json.loads(out)["message"])
+
     def test_lost_claim_is_reported_and_avoided(self):
         t = self.r.task("Contended task")
         self.r.say("bob", t, "/claim")

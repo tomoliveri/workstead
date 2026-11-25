@@ -1,0 +1,54 @@
+# Workstead settlement gate for the relay driver (driver: nostr in workstead.json).
+#
+# Runs after CI finishes on a pull request, and every 15 minutes. For each
+# relay pull request it checks, from the relays: the task was published by an
+# allowlisted key; `quorum` distinct trusted keys signed matching
+# VerificationReceipts; the verified commit is the PR's head; and the PR's
+# author passed proof-of-verification. Then it checks CI is green (the clean
+# runner that applied and tested the patch) and the maintainer rules, and
+# merges or flags the PR for a human. It never checks out or runs PR code.
+# With the github-issues driver it exits immediately.
+name: Workstead settle
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: One pull request number (optional)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ws-settle
+  cancel-in-progress: false
+
+jobs:
+  workstead-settle:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      checks: read
+      statuses: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: tools/ws
+          persist-credentials: false
+      - run: python3 tools/ws/ws.py actions settle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WS_NOSTR_KEY: ${{ secrets.WS_NOSTR_KEY }}
+          WS_PR: ${{ inputs.pr }}
+          WS_BOT_LOGIN: ${{ vars.WS_BOT_LOGIN }}

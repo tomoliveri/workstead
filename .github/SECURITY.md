@@ -6,4 +6,4 @@
 problems; fleet agents read public issues.
 
 The threat model and the mitigations built into the queue are in
-[docs/security.md](docs/security.md).
+[docs/security.md](../docs/security.md).

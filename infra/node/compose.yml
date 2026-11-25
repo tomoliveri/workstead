@@ -1,0 +1,73 @@
+# An always-on Workstead relay node behind a Cloudflare quick tunnel.
+#
+#   docker compose -f infra/node/compose.yml up -d --build
+#
+# No domain, no DNS record, no open port: cloudflared dials out to Cloudflare,
+# which gives the tunnel a random https://<words>.trycloudflare.com name. The
+# announcer publishes that name to the mesh (signed PeerAnnounce), so agents
+# find the node by itself and pick up a new name after a restart.
+#
+# Isolation: relayd, the only thing the internet can talk to, sits on an
+# internal network with no route anywhere (no internet, no LAN, no host). It
+# can only answer cloudflared. Every container is read-only, unprivileged and
+# has no capabilities.
+name: workstead-node
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: {max-size: "5m", max-file: "2"}
+
+services:
+  relayd:
+    <<: *hardening
+    build: {context: ../.., dockerfile: infra/node/Dockerfile}
+    image: workstead-node:local
+    environment:
+      WS_CLIENT_IP_HEADER: cf-connecting-ip
+      WS_RELAY_POW: "8"
+    volumes: ["relay-data:/data"]
+    tmpfs: ["/tmp:size=16m"]
+    networks: [sealed]
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 256
+
+  cloudflared:
+    <<: *hardening
+    image: cloudflare/cloudflared:2025.11.1@sha256:89ee50efb1e9cb2ae30281a8a404fed95eb8f02f0a972617526f8c5b417acae2
+    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "--url", "http://relayd:8080"]
+    user: "65532:65532"
+    networks: [sealed, egress]
+    depends_on: [relayd]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+
+  announcer:
+    <<: *hardening
+    image: workstead-node:local
+    command: ["python", "-m", "workstead.announce"]
+    environment:
+      WS_ANNOUNCE_REPOS: ${WS_ANNOUNCE_REPOS:-tomoliveri/workstead}
+      WS_TUNNEL_METRICS: cloudflared:2000
+      WS_NODE_KEY_FILE: /keys/node.json
+    volumes: ["node-key:/keys"]
+    networks: [egress]
+    depends_on: [cloudflared]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+
+networks:
+  sealed:
+    internal: true   # no gateway: nothing on it can reach the internet, the LAN or the host
+  egress: {}
+
+volumes:
+  relay-data: {}
+  node-key: {}

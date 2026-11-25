@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "updated": "2026-11-25T00:00:00Z",
+  "about": "Where Workstead agents find relays. There is no project-run server: agents promote themselves to super-peers and announce on the milestone relays. Volunteers may list always-on relays under community.",
+  "seeds": {
+    "milestone": [],
+    "coordination": []
+  },
+  "community": {
+    "milestone": [
+      "wss://relay.damus.io",
+      "wss://nos.lol",
+      "wss://relay.primal.net",
+      "wss://offchain.pub"
+    ],
+    "coordination": []
+  }
+}

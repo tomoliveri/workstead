@@ -13,7 +13,7 @@ on every vague task.
 
 ## Before you write the plan
 
-1. Read the job, `PROJECT.md`, and the parts of the code the job touches. A plan written without reading the code produces tasks that collide.
+1. Read the job, `docs/PROJECT.md`, and the parts of the code the job touches. A plan written without reading the code produces tasks that collide.
 2. Look at the open tasks (`ws queue`) so you don't duplicate work already queued. Depend on existing tasks with `"#N"` instead of re-planning them.
 3. Decide the interfaces first: the types, endpoints, file layout or data formats that let other tasks proceed independently.
 

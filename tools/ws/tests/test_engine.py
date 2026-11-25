@@ -317,6 +317,54 @@ class PullRequests(unittest.TestCase):
         r.pump()
         self.assertTrue(r.w.prs[pr]["merged"])
 
+    def test_dependency_and_binary_changes_need_a_maintainer(self):
+        r = self.r
+        for files in (["package.json"], ["web/package-lock.json"], ["requirements-dev.txt"], ["bin/tool.exe"],
+                      ["Dockerfile"], [".husky/pre-commit"]):
+            t = r.task(f"Change {files[0]}")
+            r.say("alice", t, "/claim")
+            pr = r.open_pr("alice", t, files=files)
+            self.assertIn(L["needs_maintainer"], r.labels(pr), files)
+            r.say("rev", pr, "/claim")
+            r.say("rev", pr, "/approve")
+            self.assertFalse(r.w.prs[pr]["merged"], files)
+
+    def test_huge_pull_requests_need_a_maintainer(self):
+        r, t = self.r, self.t
+        pr = r.open_pr("alice", t, files=[f"src/f{i}.py" for i in range(80)])
+        self.assertIn(L["needs_maintainer"], r.labels(pr))
+        self.assertIn("too large", r.last_reply(pr))
+
+    def test_sneaking_a_dependency_in_after_linking_is_caught(self):
+        r, t = self.r, self.t
+        pr = r.open_pr("alice", t, files=["src/app.py"], sha="1111111")
+        self.assertNotIn(L["needs_maintainer"], r.labels(pr))
+        r.as_("alice").push_pr(pr, "2222222", files=["src/app.py", "package.json"])
+        r.pump()
+        self.assertIn(L["needs_maintainer"], r.labels(pr))
+        r.say("rev", pr, "/claim")
+        r.say("rev", pr, "/approve")
+        r.pump()
+        self.assertFalse(r.w.prs[pr]["merged"])
+        r.say("boss", pr, "/approve")
+        r.pump()
+        self.assertTrue(r.w.prs[pr]["merged"])
+
+    def test_native_github_review_by_a_maintainer_counts(self):
+        r, t = self.r, self.t
+        pr = r.open_pr("alice", t, files=["package.json"])
+        r.say("rev", pr, "/claim")
+        r.say("rev", pr, "/approve")
+        self.assertFalse(r.w.prs[pr]["merged"])
+        r.as_("mallory").review_pr(pr)  # not a maintainer: ignored
+        r.sweep()
+        self.assertFalse(r.w.prs[pr]["merged"])
+        r.as_("boss").review_pr(pr)
+        r.sweep()
+        r.pump()
+        self.assertTrue(r.w.prs[pr]["merged"])
+        self.assertEqual(r.state(t)["status"], "done")
+
     def test_maintainer_merge_policy_labels_instead(self):
         r = Repo({"review": {"merge": "maintainer"}})
         give_trust(r, "rev")

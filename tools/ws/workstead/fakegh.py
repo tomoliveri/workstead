@@ -45,6 +45,10 @@ class World:
         self.merged_by_login: Dict[str, int] = {}
         self.template: Optional[str] = None
         self.fail_next: List[str] = []  # method names that raise once (fault injection)
+        # Other repositories, for safety-net verification:
+        # {"owner/name": {"owner": login, "type": "User"|"Organization", "members": [...], "issues": {n: author}}}
+        self.foreign: Dict[str, Dict[str, Any]] = {}
+        self.heads: Dict[str, str] = {}
 
     def advance(self, seconds: float) -> None:
         self.t += seconds
@@ -86,7 +90,9 @@ class World:
                 "base": {"ref": p["base"]}, "mergeable": p["mergeable"],
                 "labels": [{"name": x} for x in i["labels"]],
                 "assignees": [{"login": a} for a in i["assignees"]],
-                "created_at": i["created_at"], "updated_at": i["updated_at"]}
+                "created_at": i["created_at"], "updated_at": i["updated_at"],
+                "additions": p.get("additions", 10), "deletions": p.get("deletions", 2),
+                "changed_files": len(p["files"])}
 
     def association(self, login: str) -> str:
         perm = self.perms.get(login, "none")
@@ -126,7 +132,8 @@ class FakeGitHub:
         self._call("repo_info")
         return {"private": self.w.private, "default_branch": "main",
                 "can_push": self.w.perms.get(self.login) in ("admin", "write", "maintain"),
-                "fork": False, "template": self.w.template, "parent": None}
+                "fork": False, "template": self.w.template, "parent": None,
+                "owner": self.repo.split("/")[0], "owner_type": "User"}
 
     def permission(self, login: str) -> str:
         self._call("permission")
@@ -320,9 +327,11 @@ class FakeGitHub:
         n = self.open_pr(title, body, head.split(":")[-1], ["src/x.py"])
         return self.get_pr(n)
 
-    def push_pr(self, n: int, sha: str) -> None:
+    def push_pr(self, n: int, sha: str, files: Optional[List[str]] = None) -> None:
         """Test helper: new commits on a pull request."""
         self.w.prs[n]["sha"] = sha
+        if files is not None:
+            self.w.prs[n]["files"] = list(files)
         self.w.emit("pull_request_target", {"action": "synchronize", "pull_request": self.w.raw_pr(n),
                                             "number": n}, self.login)
 
@@ -342,9 +351,41 @@ class FakeGitHub:
         self._call("pr_files")
         return list(self.w.prs[n]["files"])
 
+    def pr_patches(self, n: int) -> Dict[str, str]:
+        self._call("pr_patches")
+        p = self.w.prs[n]
+        return {f: (p.get("patches") or {}).get(f, "") for f in p["files"]}
+
+    def repo_owner(self, full: str):
+        self._call("repo_owner")
+        f = self.w.foreign.get(full)
+        if not f or f.get("private"):
+            raise GitHubError(404, "Not Found")
+        return f["owner"], f.get("type", "User")
+
+    def public_member(self, org: str, login: str) -> bool:
+        self._call("public_member")
+        return any(f["owner"] == org and login in f.get("members", []) for f in self.w.foreign.values())
+
+    def foreign_author(self, full: str, n: int) -> str:
+        self._call("foreign_author")
+        return self.w.foreign[full]["issues"][n]
+
+    def pr_reviews(self, n: int) -> List[Dict[str, Any]]:
+        self._call("pr_reviews")
+        return list(self.w.prs[n].get("reviews", []))
+
+    def review_pr(self, n: int, state: str = "APPROVED") -> None:
+        """Test helper: a native GitHub review (no workflow event, like a fork PR)."""
+        self.w.prs[n].setdefault("reviews", []).append({"login": self.login, "state": state, "sha": self.w.prs[n]["sha"]})
+
     def prs_for_sha(self, sha: str) -> List[int]:
         self._call("prs_for_sha")
         return [n for n, p in self.w.prs.items() if p["sha"] == sha]
+
+    def branch_sha(self, branch: str) -> str:
+        self._call("branch_sha")
+        return self.w.heads.get(branch, "b" * 40)
 
     def checks_state(self, sha: str) -> str:
         self._call("checks_state")

@@ -1,0 +1,12 @@
+# The paths that control the fleet and its agents. Rendered by Workstead setup.
+# With `./ws harden`, branch protection requires a code owner's review for these,
+# on top of the queue's own maintainer check. Everything else merges through the fleet.
+
+/.github/ @tomoliveri
+/.claude/ @tomoliveri
+/tools/ws/ @tomoliveri
+/workstead.json @tomoliveri
+/docs/JOIN.md @tomoliveri
+/AGENTS.md @tomoliveri
+/ws @tomoliveri
+/tools/lib/ @tomoliveri

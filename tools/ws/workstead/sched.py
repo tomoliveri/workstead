@@ -67,6 +67,8 @@ def factors(item: Dict[str, Any], cfg: Dict[str, Any], now: float, crit: Dict[in
         f["review"] = w["review"]
     if item.get("kind") in ("rework", "resume"):
         f["rework"] = w["rework"]
+    if item.get("affinity"):
+        f["affinity"] = w.get("affinity", 0)
     return f
 
 

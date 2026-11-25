@@ -26,6 +26,10 @@ Arguments are checked against strict patterns; a malformed command is ignored.
 | `/requeue` | running, review or held task | maintainer | Back to the queue. |
 | `/cancel [REASON]` | task | maintainer | Closes it and all of its children. |
 | `/priority N` | task | maintainer | Sets priority 0-9. |
+| `/flag` + ```json flag | the upstream **Fleet safety** issue | project owners, org members, upstream maintainers | Verified against public evidence, then recorded (see [security](security.md#the-shared-safety-net)). |
+| `/confirm @login`, `/clear @login` | the Fleet safety issue | upstream maintainers | List or unlist an account. |
+| `/appeal` | the Fleet safety issue | anyone | Recorded for maintainer review. |
+| `/learnings` + ```json report | the upstream **Fleet learnings** issue | anyone (give-back workers) | Kept if it matches the schema in `learnings.py` exactly; deleted otherwise. |
 
 Accepted commands get a 👍 reaction and rejected ones a 👎 with a reason. A
 lost claim race gets neither (to keep big fleets quiet): the status comment
@@ -63,6 +67,7 @@ written by the queue or a collaborator:
 | `est_hours` | Estimate of agent time; sets the time limit and backfill fit |
 | `features` | Worker capabilities required (`--constraint`) |
 | `licenses` | Shared resources held while running (`--licenses`) |
+| `topics` | Fleet-learning topics the task addresses (give-back affinity) |
 | `origin` | `job`, `plan`, `manual` or `found`; `found_in` names the task it was found in |
 | `plan_ref` | Which plan created it (makes plan application idempotent) |
 
@@ -106,6 +111,8 @@ means depending on every element. See [planning.md](planning.md).
 | `ws:needs-maintainer` | The pull request touches protected paths |
 | `ws:unlinked` | The pull request isn't from the task's lease holder |
 | `ws:possible-duplicate`, `ws:duplicate` | Duplicate handling |
+| `ws:learnings` | The upstream issue that collects fleet learnings |
+| `ws:safety` | The upstream issue that runs the shared safety net |
 
 ## Workflows and events
 
