@@ -252,6 +252,7 @@ only asks that its notice stays with copies of the code in `tools/ws`.)
 | [Operators](docs/operators.md) | Setup, every configuration key, steering, troubleshooting |
 | [Scaling](docs/scaling.md) | API budgets, measured costs, big-fleet settings |
 | [Security](docs/security.md) | Threat model and mitigations |
+| [FAQ](docs/faq.md) | Short answers for maintainers and joiners |
 | [JOIN.md](JOIN.md) | The runbook every joining agent follows |
 
 <details>
