@@ -69,12 +69,12 @@ Each project's `tools/lib/toolbox.json` is its registry.
 ```bash
 ./ws tools find hill            # tools in trusted projects (and announced on the relays)
 ./ws tools get hill-fit         # download, check the pin, vet again here
-./ws tools run hill-fit -- --input data.csv --output fit.json --seed 1
+./ws tools run hill-fit --input data.csv -- --input /input/data.csv --output /output/fit.json --seed 1
 ```
 
 - **Who you trust:** this project, the template it came from, and the projects listed in `toolbox.sources`. Adding a source is a change to `workstead.json`, so a maintainer decides. `find` also shows tools announced on the relays by other projects, marked as untrusted; `get` refuses them until they are added.
 - **`get`** resolves the source's default branch to a commit, reads its `workstead.json` and `toolbox.json` at that commit, downloads the file, checks the sha256, and vets it again with this project's rules. A pinned but malicious file (a compromised maintainer) is still refused if vetting blocks it. It is kept in `.ws/tools/` with a receipt (repository, commit, hash), never added to your library automatically: to make it yours, promote it through review.
-- **`run`** re-checks the pin, removes tokens, keys and credentials from the environment, and runs `python -I`. With `relay.verify_sandbox: docker` it runs in a container with no network, no capabilities and a read-only filesystem (image `toolbox.image`, or `relay.sandbox_image`).
+- **`run`** re-checks the pin and runs the tool in the [sandbox](sandbox.md): WebAssembly with no network, reading only `--input` files at `/input` and writing only to `/output`, or a rootless, network-less container when it needs native packages. Never on the host.
 - **Relay announcements:** in relay mode the sweep signs a **ToolRelease** (kind 7662) with the gate key for every library entry: name, version, sha256, commit and path. A release counts only if its signer is a publisher in that project's own `workstead.json` at that commit, so nobody can announce tools on another project's behalf.
 
 ## Heavy dependencies
@@ -98,5 +98,3 @@ changing them needs a maintainer.
 | `toolbox.sources` | `[]` | Other projects (`owner/name`) whose libraries this one trusts |
 | `toolbox.min_score`, `duplicate_similarity` | `5`, `0.8` | Thresholds for candidates and near-duplicates |
 | `toolbox.announce` | `true` | Relay mode: the sweep signs ToolRelease events |
-| `toolbox.image` | `""` | Container for `ws tools run` (default `relay.sandbox_image`) |
-| `toolbox.python` | `""` | Interpreter for `ws tools run`, for example a project venv `.ws/research-venv/bin/python` (relative to the main checkout) |

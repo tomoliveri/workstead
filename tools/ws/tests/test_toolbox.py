@@ -173,19 +173,12 @@ class Sharing(unittest.TestCase):
         escape = T.release_event(gate, "https://github.com/acme/shared", "hill-fit", entry, "c" * 40, "../", 1000)
         self.assertFalse(T.release_ok(escape))
 
-    def test_run_scrubs_secrets(self):
-        import os
-        os.environ["GITHUB_TOKEN"] = "x"
-        try:
-            env = T.scrubbed_env()
-        finally:
-            del os.environ["GITHUB_TOKEN"]
-        self.assertNotIn("GITHUB_TOKEN", env)
-        cmd = T.run_command(C.load(data={"repo": "a/b", "relay": {"verify_sandbox": "docker"}}),
-                            Path("/x/tool.py"), ["--seed", "1"], Path("/w"))
-        self.assertIn("--network", cmd)
-        self.assertEqual(cmd[cmd.index("--network") + 1], "none")
-
+    def test_tools_run_only_through_the_sandbox(self):
+        import inspect
+        src = inspect.getsource(T.cmd_tools)
+        run = src[src.index('if what == "run":'):src.index('if what == "announce":')]
+        self.assertIn("SB.run_python", run)
+        self.assertNotIn("subprocess", run)
 
 if __name__ == "__main__":
     unittest.main()

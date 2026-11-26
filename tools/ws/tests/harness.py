@@ -111,3 +111,15 @@ class Repo:
 
     def reacted(self, cid, content):
         return any(r[0] == cid and r[1] == content for r in self.w.reactions)
+
+
+def host_runner(cmd, wt, cfg, timeout=None, **_):
+    """Tests only: run a check command directly, so unit tests don't need a container engine.
+
+    Production code has no way to choose this: RealGit.runner is set in code,
+    never from configuration, and the CLI always uses the sandbox.
+    """
+    import subprocess
+    from workstead.sandbox import Result
+    r = subprocess.run(cmd, shell=True, cwd=str(wt), capture_output=True, text=True, timeout=timeout)  # noqa: S602
+    return Result(r.returncode, r.stdout, r.stderr, "test-host", 0.0, 0.0)

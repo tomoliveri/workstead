@@ -72,7 +72,8 @@ typos fail loudly. Keys starting with `$` are comments.
 | `relay.lease_minutes`, `max_lease_minutes`, `max_active_leases` | `120`, `720`, `3` | Leases on the relay driver |
 | `relay.pow_bits` | `8` | NIP-13 proof of work on agent events (anti-spam) |
 | `relay.guest.enabled`, `relay.guest.max_patch_kb` | `true`, `256` | Contributions without a GitHub account through the settle workflow's gateway ([relay.md](relay.md#contributing-without-a-github-account)) |
-| `relay.verify_sandbox`, `sandbox_image` | `none`, `python:3.12-slim` | Run verification in a network-less container (`docker`) |
+| `sandbox.*` | 2 GB, 30 min, 2 CPUs, Podman first, pinned `python:3.12-slim` | Where all project code runs: WebAssembly first, rootless container fallback, never the host ([sandbox.md](sandbox.md)) |
+| `relay.verify_sandbox`, `sandbox_image` | ignored | Deprecated: checks always run in the sandbox |
 | `relay.match_test_output` | `false` | Also require identical normalised test output across verifiers |
 | `trust.deny` | `[]` | Logins this project never trusts and never lets claim work |
 | `safety.shared` | `true` | Read the shared safety-net list from upstream ([security](security.md#the-shared-safety-net)) |

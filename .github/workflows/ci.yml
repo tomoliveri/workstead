@@ -70,7 +70,32 @@ jobs:
           python tools/ws/ws.py plan-check docs/examples/plan-feature.json
           python tools/ws/ws.py plan-check docs/examples/plan-mapreduce.json
 
-  simulate:
+  sandbox:
+    name: Sandbox (WebAssembly and rootless container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+      - name: Fetch Pyodide (hash-checked)
+        run: python tools/ws/ws.py sandbox setup numpy
+      - name: Escape attempts, limits and container isolation
+        env:
+          WS_TEST_CONTAINER: "1"
+          WS_HOME: ${{ runner.temp }}/ws-test-home
+        run: |
+          mkdir -p "$WS_HOME" && cp -R ~/.workstead/sandbox "$WS_HOME/"
+          python tools/ws/ws.py sandbox doctor
+          python -m unittest discover -s tools/ws/tests -p test_sandbox.py -v
+
+
     name: Fleet simulation
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -112,7 +137,7 @@ jobs:
   ok:
     name: CI ok
     if: always()
-    needs: [lint, test, simulate, project]
+    needs: [lint, test, simulate, project, sandbox]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

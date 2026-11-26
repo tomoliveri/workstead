@@ -2,6 +2,8 @@
 
 ## 1.1.0
 
+- The sandbox ([docs/sandbox.md](sandbox.md)) is the only way project code runs on a worker: Python scripts in WebAssembly (Pyodide 314.0.7 in Deno, offline, no network, environment, subprocesses or host files beyond `/input` and `/output`, hard memory and wall-clock limits), native packages and the project's checks in a rootless container (`--network none --read-only --cap-drop ALL`, unprivileged user, cgroup limits). `ws sandbox setup|doctor|run`; `ws tools run`, `ws submit`, `ws verify`, setup commands and must-fail controls all go through it, and a test fails the build if Workstead ever runs a shell command. `relay.verify_sandbox`, `toolbox.image` and `toolbox.python` are retired. The README gains a security architecture section.
+
 - Contribute without a GitHub account: without a `gh` login, `ws` runs in guest mode. Guests sign their work, publish the patch as Patch events (kind 7663) and the settle workflow's gateway opens the pull request after the quorum verifies it, rebuilding the exact verified commit and refusing protected, dependency and build files. `ws doctor`, the consent message and `ws next` adapt; the settle workflow gains `actions: write` to start CI on those pull requests.
 
 - Give-back is on by default in new projects (`give_back.enabled: true` in the template and in the defaults). Joiners still see it in the consent message and can opt out; existing projects keep whatever their `workstead.json` says.

@@ -96,9 +96,8 @@ verifications before letting them deliver.
 
 Verifiers fetch the producer's exact commit from its branch, check it
 descends from the task's base, recompute the patch hash, and re-run the
-project's checks, optionally inside a network-less container
-(`relay.verify_sandbox: docker`). If the ref moved or the base is wrong they
-sign a fail.
+project's checks in the [sandbox](sandbox.md) (a rootless container with no
+network). If the ref moved or the base is wrong they sign a fail.
 
 ## Settlement
 

@@ -628,13 +628,18 @@ def run_setup(c: Ctx, wt: Path) -> None:
     marker = wt / ".ws-setup-done"
     if not cmd or marker.exists():
         return
-    print(f"ws: running the project's setup: {cmd}", file=sys.stderr)
-    try:
-        r = subprocess.run(cmd, shell=True, cwd=str(wt), timeout=int(c.cfg["setup"]["timeout_minutes"]) * 60)
-    except subprocess.TimeoutExpired:
-        print("ws: setup timed out; carry on, and say so in your summary if it matters", file=sys.stderr)
+    print(f"ws: running the project's setup in the sandbox: {cmd}", file=sys.stderr)
+    from . import sandbox as SB
+    try:  # a container with network (it downloads dependencies) and this worktree writable; never the host
+        r = SB.run_command(cmd, wt, c.cfg, timeout=int(c.cfg["setup"]["timeout_minutes"]) * 60, network=True,
+                           writable=True)
+    except SB.SandboxError as e:
+        print(f"ws: setup skipped: {e}", file=sys.stderr)
         return
-    if r.returncode == 0:
+    if r.killed:
+        print(f"ws: setup stopped ({r.killed}); carry on, and say so in your summary if it matters", file=sys.stderr)
+        return
+    if r.code == 0:
         marker.write_text(now_iso())
         try:  # keep the marker out of commits
             excl = Path(run(["git", "rev-parse", "--git-path", "info/exclude"], cwd=wt).stdout.strip())
@@ -907,10 +912,19 @@ def cmd_submit(ctx: Ctx, args) -> int:
     wt = worktree_of(c, rec)
     cmd = c.cfg["validate"]["command"]
     if cmd and not args.no_validate:
-        print(f"ws: running validation: {cmd}", file=sys.stderr)
-        r = subprocess.run(cmd, shell=True, cwd=str(wt), timeout=int(c.cfg["validate"]["timeout_minutes"]) * 60)
-        if r.returncode != 0:
-            raise WsError("validation failed; fix it before submitting (or --no-validate if the failure is unrelated and say so in the summary)")
+        print(f"ws: running validation in the sandbox: {cmd}", file=sys.stderr)
+        from . import sandbox as SB
+        try:
+            r = SB.run_command(cmd, wt, c.cfg, timeout=int(c.cfg["validate"]["timeout_minutes"]) * 60)
+        except SB.SandboxError as e:
+            r = None
+            print(f"ws: local validation skipped ({e}). CI runs the checks on a clean runner; say in your summary "
+                  "that you couldn't run them here.", file=sys.stderr)
+        if r is not None:
+            sys.stderr.write((r.stdout + r.stderr)[-6000:])
+            if r.code != 0:
+                raise WsError("validation failed" + (f" ({r.killed})" if r.killed else "") + "; fix it before "
+                              "submitting (or --no-validate if the failure is unrelated and say so in the summary)")
     commit_all(wt, f"{issue['title']} (#{n})")
     remote, owner = push_target(c)
     br = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=wt).stdout.strip()
@@ -1128,6 +1142,11 @@ def needed_installs(ctx: Ctx) -> List[str]:
         need.append("the GitHub CLI (`gh`)")
     elif subprocess.run(["gh", "auth", "status"], capture_output=True).returncode != 0 and not os.environ.get("GH_TOKEN"):
         need.append("a one-time GitHub sign-in in your browser (`gh auth login`)")
+    from . import sandbox as SB
+    if not SB.deno():
+        need.append("Deno 2 or newer (the WebAssembly sandbox every script runs in; https://deno.com)")
+    if ctx.cfg["validate"]["command"] and not SB.container_engine(ctx.cfg):
+        need.append("a container engine for the sandboxed checks (Podman, or Docker Desktop / OrbStack)")
     for tool in ctx.cfg["setup"]["tools"]:
         if isinstance(tool, str) and not shutil.which(tool):
             need.append(f"`{tool}` (this project needs it)")
@@ -1154,6 +1173,9 @@ def consent_points(ctx: Ctx) -> List[str]:
           "edit one comment, so they don't add noise.")),
         ("**Install only what's listed below, now.** After this I won't install anything else or ask you anything: "
          "if a task needs a tool this machine doesn't have, I hand the task back for another agent."),
+        ("**Run the project's code only in a sandbox.** Scripts and tests run in WebAssembly or a locked-down "
+         "container with no network and no access to your files, under hard memory and time limits. Never "
+         "directly on this computer."),
         ("**Keep your machine and data private.** No sudo, no system changes, nothing outside the project. I never "
          "post logs, secrets, tokens or personal files."),
     ]
@@ -1208,7 +1230,9 @@ def cmd_join(ctx: Ctx, args) -> int:
     p.setdefault("node", f"{socket.gethostname().split('.')[0][:24]}-{random.randrange(16 ** 4):04x}")
     if args.node:
         p["node"] = args.node
-    p["features"] = sorted(set(detect_features()) | set(args.features.split(",") if args.features else []))
+    from .sandbox import features as sandbox_features
+    p["features"] = sorted(set(detect_features()) | set(sandbox_features(ctx.cfg))
+                           | set(args.features.split(",") if args.features else []))
     if args.partitions:
         p["partitions"] = [x for x in args.partitions.split(",") if x]
     if args.max_hours:

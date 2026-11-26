@@ -150,19 +150,27 @@ DEFAULTS: Dict[str, Any] = {
     # | "lean" | "code" (built-in forbid lists). frozen: statement/evaluator
     # paths no patch may touch. must_fail: control commands that must fail.
     "verify": {"profile": "", "forbid": [], "frozen": [], "must_fail": []},
+    # The sandbox (sandbox.py): the only way project code runs on a worker's
+    # machine. Python scripts run in WebAssembly (Pyodide in Deno, offline);
+    # scripts needing native packages and the project's checks run in a
+    # rootless container with no network. memory_mb and timeout_seconds are
+    # hard limits per job. image: the container image (pin it by digest; it
+    # needs what validate.command uses). packages: Pyodide packages that
+    # `ws sandbox setup` fetches. engine: auto | podman | docker. gpus: pass
+    # NVIDIA GPUs to containers (Linux, Docker).
+    "sandbox": {"memory_mb": 2048, "timeout_seconds": 1800, "cpus": 2, "tmpfs_mb": 1024, "engine": "auto",
+                "image": "", "packages": [], "allow_rootful": False, "gpus": False},
     # The toolbox (toolbox.py): vetted reusable scripts. path: the library
     # (protected: changes need a maintainer). scan/ignore: where `ws tools
     # scan` looks for candidates. allow_imports: third-party modules tools
     # may use (numpy, scipy...). sources: other projects (owner/name) whose
-    # libraries this one trusts, besides itself and its template. image: the
-    # container for `ws tools run` with relay.verify_sandbox docker. python:
-    # the interpreter tools run with (a project venv with NumPy...), relative
-    # to the main checkout; empty uses the one running ws.
+    # libraries this one trusts, besides itself and its template. Tools run in
+    # the sandbox (see "sandbox").
     "toolbox": {"path": "tools/lib/", "scan": ["**/*.py"],
                 "ignore": ["tools/ws/", ".ws/", ".github/", "tests/", "test_*.py", "*_test.py", "conftest.py",
                            "setup.py", "node_modules/", ".venv/", "venv/"],
                 "allow_imports": [], "sources": [], "min_score": 5, "duplicate_similarity": 0.8,
-                "announce": True, "image": "", "python": ""},
+                "announce": True},
     "relay": {
         # Milestones (TaskPublished, VerificationReceipt, Endorsement,
         # TaskSettled): two or three tiny events per completed task, so free
@@ -245,8 +253,10 @@ DEFAULTS: Dict[str, Any] = {
         # request after the quorum verifies it. Protected, dependency and
         # build files are always refused for guests.
         "guest": {"enabled": True, "max_patch_kb": 256},
+        # Deprecated and ignored: every check now runs in the sandbox (see
+        # "sandbox" above). Kept so older workstead.json files still load.
         "verify_sandbox": "none",
-        "sandbox_image": "python:3.12-slim",
+        "sandbox_image": "",
     },
     "limits": {"result_chars": 60000, "plan_chars": 120000, "body_chars": 20000},
 }
@@ -308,6 +318,14 @@ def validate(cfg: Dict[str, Any]) -> None:
     from .contract import PROFILES
     if cfg["verify"]["profile"] not in ("",) + tuple(PROFILES):
         raise ConfigError(f"verify.profile must be one of: {', '.join(PROFILES)} (or empty)")
+    sb = cfg["sandbox"]
+    if sb["engine"] not in ("auto", "podman", "docker"):
+        raise ConfigError("sandbox.engine must be auto, podman or docker")
+    if not (64 <= int(sb["memory_mb"]) <= 262144 and 1 <= int(sb["timeout_seconds"]) <= 86400
+            and 0 < float(sb["cpus"]) <= 256 and 16 <= int(sb["tmpfs_mb"]) <= 262144):
+        raise ConfigError("sandbox limits: memory_mb 64-262144, timeout_seconds 1-86400, cpus > 0, tmpfs_mb 16+")
+    if sb["image"] and not re.match(r"^[a-z0-9./_:-]+(@sha256:[0-9a-f]{64})?$", sb["image"]):
+        raise ConfigError("sandbox.image must be an image reference (pin it with @sha256:...)")
     tb = cfg["toolbox"]
     if not re.match(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/?$", tb["path"]) or ".." in tb["path"].split("/"):
         raise ConfigError("toolbox.path must be a relative directory like tools/lib/")

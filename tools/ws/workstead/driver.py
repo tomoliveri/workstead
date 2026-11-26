@@ -81,6 +81,8 @@ class RealGit(GitOps):
         self.guest_pk = ""  # set for guests: deliver the patch as signed events instead of pushing
         self.publish_patch = None  # guests: callable(task_id, patch_bytes)
         self.fetch_patch = None  # callable(patch_hash, producer) -> bytes or None
+        # Every check runs in the sandbox (sandbox.run_command). Tests inject a runner in code; config can't.
+        self.runner = None
 
     def _git(self, *args: str, cwd: Optional[Path] = None, check: bool = True) -> subprocess.CompletedProcess:
         r = subprocess.run(["git", *args], cwd=str(cwd or self.root), capture_output=True, text=False)
@@ -96,20 +98,21 @@ class RealGit(GitOps):
             self._git("worktree", "add", "-B", f"ws/relay-{task['id'][:12]}", str(wt), f"origin/{self.cfg['default_branch']}")
         return wt
 
+    def _sandboxed(self, cmd: str, wt: Path):
+        from . import sandbox as SB
+        run = self.runner or SB.run_command
+        try:
+            return run(cmd, wt, self.cfg, timeout=self.cfg["validate"]["timeout_minutes"] * 60)
+        except SB.SandboxError as e:
+            raise RuntimeError(str(e)) from None
+
     def run_checks(self, wt: Path) -> Tuple[str, str]:
         if not self.validate:
             return N.tests_hash(""), "pass"
-        cmd = self.validate
-        rc = self.cfg["relay"]
-        if rc["verify_sandbox"] == "docker":
-            argv = ["docker", "run", "--rm", "--network", "none", "-v", f"{wt}:/work", "-w", "/work",
-                    rc["sandbox_image"], "sh", "-c", cmd]
-            r = subprocess.run(argv, capture_output=True, text=True, timeout=self.cfg["validate"]["timeout_minutes"] * 60)
-        else:
-            r = subprocess.run(cmd, shell=True, cwd=str(wt), capture_output=True, text=True,
-                               timeout=self.cfg["validate"]["timeout_minutes"] * 60)
-        self.last_log = (r.stdout + r.stderr).replace(str(wt), "<root>")
-        return N.tests_hash(r.stdout + r.stderr, str(wt)), "pass" if r.returncode == 0 else "fail"
+        r = self._sandboxed(self.validate, wt)
+        text = r.stdout + r.stderr + (f"\n[sandbox stopped it: {r.killed}]" if r.killed else "")
+        self.last_log = text.replace(str(wt), "<root>").replace("/work", "<root>")
+        return N.tests_hash(text, "/work"), "pass" if r.code == 0 else "fail"
 
     def contract_problems(self, wt: Path, base: str, output: str, task: Dict[str, Any]) -> List[str]:
         """Contract violations (forbidden lines, frozen paths) and controls that didn't fail."""
@@ -119,9 +122,8 @@ class RealGit(GitOps):
         files, by = K.split_diff(diff)
         problems = K.violations(files, by, c)
         for cmd in c["must_fail"]:
-            r = subprocess.run(cmd, shell=True, cwd=str(wt), capture_output=True, text=True,
-                               timeout=self.cfg["validate"]["timeout_minutes"] * 60)
-            if r.returncode == 0:
+            r = self._sandboxed(cmd, wt)
+            if r.code == 0:
                 problems.append(f"control `{cmd}` passed but must fail: the argument proves too much")
         return problems
 

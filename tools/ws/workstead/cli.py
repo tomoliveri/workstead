@@ -69,16 +69,43 @@ def _guest_blocked(ctx, args) -> str:
     return ""
 
 
+def _sandbox_run_args(args, rest):
+    """ws sandbox run SCRIPT [--input P]... [--output DIR] [--memory MB] [--timeout S] [--backend B] [-- ARGS]"""
+    script, tail = rest[:1], rest[1:]
+    flags = {"--input": "input", "--output": "output", "--memory": "memory", "--timeout": "timeout",
+             "--backend": "backend"}
+    while tail and tail[0] in flags and len(tail) > 1:
+        k = flags[tail[0]]
+        if k == "input":
+            args.input = (args.input or []) + [tail[1]]
+        else:
+            setattr(args, k, int(tail[1]) if k in ("memory", "timeout") else tail[1])
+        tail = tail[2:]
+    if tail[:1] == ["--"]:
+        tail = tail[1:]
+    return script + tail
+
+
 def _tool_flags(args, rest):
     """`ws tools` takes its flags anywhere; for `run`, everything after NAME (and an optional --) is the tool's."""
     if args.what == "run":
-        if len(rest) >= 2 and rest[1] == "--":
-            rest = [rest[0]] + rest[2:]
-        return rest
+        # ws tools run NAME [--input P]... [--output DIR] [-- ARGS]
+        name, tail = rest[:1], rest[1:]
+        while tail and tail[0] in ("--input", "--output") and len(tail) > 1:
+            if tail[0] == "--input":
+                args.input = (getattr(args, "input", None) or []) + [tail[1]]
+            else:
+                args.output = tail[1]
+            tail = tail[2:]
+        if tail[:1] == ["--"]:
+            tail = tail[1:]
+        return name + tail
     p = argparse.ArgumentParser(prog="ws tools", add_help=False)
     for flag in ("--name", "--version", "--summary", "--ref"):
         p.add_argument(flag)
     p.add_argument("--from", dest="source")
+    p.add_argument("--input", action="append")
+    p.add_argument("--output")
     p.add_argument("--offline", action="store_true")
     p.add_argument("--json", action="store_true")
     ns, pos = p.parse_known_args(rest)
@@ -201,6 +228,16 @@ def main(argv=None) -> int:
     fs = sub.add_parser("findings")
     fs.add_argument("ref", nargs="?", default="")
     fs.add_argument("--json", action="store_true")
+    sx = sub.add_parser("sandbox", help="the sandbox every script and check runs in: setup, doctor, run")
+    sx.add_argument("what", choices=["setup", "doctor", "run"])
+    sx.add_argument("paths", nargs=argparse.REMAINDER, help="run: SCRIPT [-- ARGS]")
+    sx.add_argument("--input", action="append", help="a file or directory, visible as /input/<name> (repeatable)")
+    sx.add_argument("--output", help="where /output is copied to (default: sandbox-output)")
+    sx.add_argument("--backend", default="auto", choices=["auto", "wasm", "container"])
+    sx.add_argument("--memory", type=int, help="memory limit in MB")
+    sx.add_argument("--timeout", type=int, help="wall-clock limit in seconds")
+    sx.add_argument("--packages", nargs="*", help="setup: extra Pyodide packages (numpy, scipy...)")
+    sx.add_argument("--json", action="store_true")
     tl = sub.add_parser("tools", help="vetted reusable scripts: scan, vet, promote, list, find, get, run")
     tl.add_argument("what", choices=["scan", "vet", "promote", "list", "find", "get", "run", "announce"])
     tl.add_argument("paths", nargs=argparse.REMAINDER, help="files, a tool name, or NAME -- ARGS for run")
@@ -222,6 +259,13 @@ def main(argv=None) -> int:
         ap.print_help()
         return 0
     root = C.find_root()
+    if args.cmd == "sandbox":
+        from .sandbox import cmd_sandbox
+        if args.what == "run":
+            args.paths = _sandbox_run_args(args, list(args.paths))
+        elif args.what == "setup":  # ws sandbox setup [--packages] numpy scipy ...
+            args.packages = (args.packages or []) + [p for p in args.paths if not p.startswith("-")]
+        return cmd_sandbox(type("X", (), {"cfg": C.load(root)})(), args)
     if args.cmd == "actions":
         return {"event": admin.actions_event, "sweep": admin.actions_sweep, "setup": admin.setup,
                 "settle": admin.actions_settle}[args.what](root)

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from harness import Repo
+from harness import Repo, host_runner
 from workstead import config as C, guest as G, nostr as N, schnorr as S
 from workstead.driver import RealGit
 from workstead.relay import matches
@@ -143,6 +143,7 @@ class GuestProducesAndOthersVerify(unittest.TestCase):
         pool = Pool()
         task = {"id": "ef" * 32, "base": base, "created_at": 1_700_000_123, "spec": {"title": "Double it"}}
         g = RealGit(clone(bare), cfg, "", "true")
+        g.runner = host_runner
         g.guest_pk = GPK
         g.publish_patch = lambda tid, data: [pool.publish(e) for e in G.patch_events(GUEST, REPO_URL, tid, data, 5)]
         wt = g.worktree(task)
@@ -152,11 +153,13 @@ class GuestProducesAndOthersVerify(unittest.TestCase):
         self.assertEqual(ref, "nostr:" + patch)
         self.assertTrue(N.REF_RE.match(ref))
         v = RealGit(clone(bare), cfg, "", "true")
+        v.runner = host_runner
         v.fetch_patch = lambda h, producer: G.fetch_patch(pool, h, producer, 1 << 20)
         vpatch, _, vverdict = v.verify(ref, base, out, dict(task, producer=GPK))
         self.assertEqual((vpatch, vverdict), (patch, "pass"))
         # A receipt claiming another commit for the same patch is never vouched for.
         v2 = RealGit(clone(bare), cfg, "", "true")
+        v2.runner = host_runner
         v2.fetch_patch = v.fetch_patch
         self.assertEqual(v2.verify(ref, base, "1" * 40, dict(task, producer=GPK))[2], "fail")
 
@@ -164,6 +167,7 @@ class GuestProducesAndOthersVerify(unittest.TestCase):
         bare, _ = origin_with_base()
         cfg = C.load(data={"repo": "acme/project", "relay": {"pow_bits": 0}})
         g = RealGit(clone(bare), cfg, "", "true")
+        g.runner = host_runner
         g.guest_pk = GPK
         g.publish_patch = lambda tid, data: None
         task = {"id": "ef" * 32, "base": git(g.root, "rev-parse", "HEAD"), "created_at": 1, "spec": {}}

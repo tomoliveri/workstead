@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from harness import Repo
+from harness import Repo, host_runner
 from workstead import config as C, contract as K, findings as F, nostr as N, schnorr as S
 from workstead.driver import RealGit
 from workstead.settle import audit_sampled, settle_pr
@@ -52,10 +52,13 @@ class Contract(unittest.TestCase):
             out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True, text=True).stdout.strip()
             cfg = C.load(data={"repo": "a/b", "verify": {"must_fail": ["test -f proof.txt"]}})
             g = RealGit(root, cfg, "", "true")
+            g.runner = host_runner
             problems = g.contract_problems(root, base, out, {"spec": {}})
             self.assertTrue(any("proves too much" in p for p in problems), problems)
             cfg2 = C.load(data={"repo": "a/b", "verify": {"must_fail": ["test -f no-such-file"]}})
-            self.assertEqual(RealGit(root, cfg2, "", "true").contract_problems(root, base, out, {"spec": {}}), [])
+            g2 = RealGit(root, cfg2, "", "true")
+            g2.runner = host_runner
+            self.assertEqual(g2.contract_problems(root, base, out, {"spec": {}}), [])
 
     def test_gate_rejects_a_pr_that_edits_the_statement(self):
         r = Repo({"verify": {"frozen": ["Statements/"]},

@@ -20,7 +20,7 @@ page lists each lesson and what Workstead does about it.
 | **State the evidence, claim by claim; audit by sampling** (swarm perspective paper) | Results released with unclear verification status | On merge the gate writes what the verification consisted of (agents, machine checks, contract) and picks `review.audit_rate` (5%) of results, by task hash, for a human audit (`ws:audit` → `ws:audit-pass` / `ws:audit-fail`): a measured error rate |
 | **Novelty is a literature problem** (most early "AI solved an Erdős problem" claims were already in the literature) | Rediscoveries announced as new | `prior-art` is a finding outcome; recording where a result already exists is a first-class contribution |
 | **Humans frame, agents search** (every result: humans chose the problem, fixed the statement, condensed and checked) | Fully autonomous claims are the least trusted | Maintainers own the plan, the frozen statements and the publisher keys; the fleet works inside them |
-| **Agents edited their own limits** (swarm perspective paper) | Full machine access | Protected paths, the supply-chain guard, and `relay.verify_sandbox: docker` (no network) for running other agents' code |
+| **Agents edited their own limits** (swarm perspective paper) | Full machine access | Protected paths, the supply-chain guard, and the [sandbox](sandbox.md) (WebAssembly or a rootless, network-less container) for running any agent's code |
 
 ## Using it for research problems
 

@@ -23,9 +23,9 @@ benchmark, a sampler). The toolbox turns a good one into a shared tool:
    checks its sha256 against that project's manifest, vets it again here, and
    keeps it in `.ws/tools/`. A release counts only when it is signed by a
    publisher key listed in its own project's `workstead.json`.
-5. **Run** (`ws tools run`): re-check the hash, then run with a scrubbed
-   environment (no tokens), and in a network-less container when
-   `relay.verify_sandbox` is `docker`.
+5. **Run** (`ws tools run`): re-check the hash, then run in the sandbox
+   (sandbox.py): WebAssembly with no network and only /input and /output,
+   or a rootless, network-less container for native packages.
 """
 from __future__ import annotations
 
@@ -606,49 +606,6 @@ def announce(root: Path, cfg: Dict[str, Any], relays, seckey: bytes, repo: str, 
     return out
 
 
-# --- running ---------------------------------------------------------------------------
-
-SAFE_ENV = ("PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "LANG", "LC_ALL", "TZ", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT", "OMP_NUM_THREADS",
-            "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMBA_NUM_THREADS", "CUDA_VISIBLE_DEVICES",
-            "HIP_VISIBLE_DEVICES", "PYTORCH_ENABLE_MPS_FALLBACK", "VIRTUAL_ENV", "CONDA_PREFIX", "PYTHONHASHSEED")
-
-
-def scrubbed_env() -> Dict[str, str]:
-    """No tokens, keys or credentials reach a tool: only what numerical code needs."""
-    env = {k: v for k, v in os.environ.items() if k in SAFE_ENV}
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    return env
-
-
-def run_command(cfg: Dict[str, Any], file: Path, args: List[str], workdir: Path) -> List[str]:
-    if cfg["relay"]["verify_sandbox"] == "docker":
-        return ["docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL", "--security-opt",
-                "no-new-privileges", "--read-only", "--tmpfs", "/tmp", "-v", f"{workdir}:/work", "-w", "/work",
-                "-v", f"{file.parent}:/tool:ro", cfg["toolbox"]["image"] or cfg["relay"]["sandbox_image"],
-                "python", "-I", "-B", f"/tool/{file.name}", *args]
-    return [tool_python(cfg), "-I", "-B", str(file), *args]
-
-
-def tool_python(cfg: Dict[str, Any], root: Optional[Path] = None) -> str:
-    """toolbox.python (a project venv), resolved against the main checkout; else this interpreter."""
-    p = cfg["toolbox"].get("python") or ""
-    if not p:
-        return sys.executable
-    path = Path(p)
-    if not path.is_absolute():
-        try:
-            common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                                    cwd=root or Path.cwd(), capture_output=True, text=True, check=True).stdout.strip()
-            path = Path(common).parent / path
-        except (OSError, subprocess.SubprocessError):
-            path = (root or Path.cwd()) / path
-    if os.name == "nt" and path.suffix != ".exe" and path.with_suffix(".exe").exists():
-        path = path.with_suffix(".exe")
-    if not path.exists():
-        raise ValueError(f"toolbox.python {p} doesn't exist yet: set up the project's environment first")
-    return str(path)
-
-
 def show_context(root: Path, cfg: Dict[str, Any], limit: int = 12) -> List[str]:
     """A few lines for `ws show`: the shared tools, so agents reuse instead of rewriting."""
     try:
@@ -805,15 +762,17 @@ def cmd_tools(ctx, args, home: Path) -> int:
         if not f.is_file() or sha256_file(f) != pin:
             print(f"ws: {f} doesn't match its pinned sha256; refusing to run it", file=sys.stderr)
             return 1
-        if cfg["relay"]["verify_sandbox"] != "docker":
-            print("ws: running without a container (set relay.verify_sandbox: docker for no network); "
-                  "tokens and keys are removed from its environment", file=sys.stderr)
-        try:
-            cmd = run_command(cfg, f, extra, Path.cwd())
-        except ValueError as e:
+        from . import sandbox as SB
+        try:  # never on the host: WebAssembly, or a rootless container for native packages
+            res = SB.run_python(f, [Path(i) for i in (getattr(args, "input", None) or [])],
+                                Path(getattr(args, "output", None) or "tool-output"), extra, cfg)
+        except SB.SandboxError as e:
             print(f"ws: {e}", file=sys.stderr)
             return 1
-        return subprocess.run(cmd, env=scrubbed_env()).returncode
+        sys.stdout.write(res.stdout)
+        sys.stderr.write(res.stderr)
+        print(json.dumps({"sandbox": res.describe()}), file=sys.stderr)
+        return res.code
     if what == "announce":
         from .settle import gate_key_from_env
         from .driver import relays_for

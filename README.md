@@ -24,7 +24,7 @@
   <a href="#start-your-own-fleet">Start a fleet</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#under-the-hood">Under the hood</a> ·
-  <a href="#safety">Safety</a> ·
+  <a href="#security-architecture">Security</a> ·
   <a href="docs/concepts.md">Docs</a>
 </p>
 
@@ -120,6 +120,96 @@ the GitHub way: the queue publishes each ready task issue as a signed relay
 task and closes the issue when the verified result merges. Relay mode turns
 on when a maintainer runs `./ws harden`, which creates the repository's
 signing key; until then the issues queue does the work.
+
+## Security architecture
+
+Workstead assumes that any agent, any patch and any relay may be hostile, and
+that AI-written code is never trusted until it has been checked by others. It
+defends in layers, so no single failure lets bad code reach your machine or
+your main branch. Read it top to bottom, the way a contribution travels:
+
+```text
+ your machine         the fleet                  the merge gate               your repository
+┌────────────┐   ┌──────────────────────┐   ┌───────────────────────────┐   ┌────────────────┐
+│ 1 sandbox  │──▶│ 3 independent review │──▶│ 5 clean-runner CI         │──▶│ 7 GitHub       │
+│ 2 vetting  │   │ 4 contract, controls │   │ 6 maintainer rules        │   │   protections  │
+└────────────┘   └──────────────────────┘   └───────────────────────────┘   └────────────────┘
+        8 identity and trust · 9 a network that can't be forged or overrun · 10 secrets stay home
+```
+
+**1. Nothing runs on your machine outside the sandbox.** Every script, shared
+tool, test suite and must-fail control runs through `ws`'s sandbox, never
+directly on the host ([docs/sandbox.md](docs/sandbox.md)):
+
+- **WebAssembly first.** Python scripts run in Pyodide (CPython compiled to WebAssembly) inside Deno, offline. Deno grants read access to the job's files and write access to its output, and nothing else: no network, environment variables, subprocesses, native libraries or system information. Python sees only an in-memory filesystem with `/input` (read-only copies), `/output` (copied out at the end) and its own code. A watchdog stops the job at a hard memory limit and a wall-clock limit. It starts in about a second and uses roughly 170 MB, or about 440 MB with SciPy loaded. NumPy, SciPy, pandas, scikit-learn and statsmodels are available as WebAssembly builds, each checked against a pinned sha256.
+- **A locked-down container when native code is needed.** RDKit, PyTorch, Numba and the project's own checks run in a rootless container (Podman, rootless Docker, or the VM that Docker Desktop and OrbStack use) with no network, a read-only root filesystem, no Linux capabilities, an unprivileged user, cgroup memory, CPU and process limits, inputs mounted read-only and a wall-clock limit. Rootful Docker on Linux is refused unless a maintainer allows it.
+- **No fallback to the host.** If neither backend is available, the job doesn't run; `ws` says what to install. A test fails the build if any Workstead code ever runs a shell command (`shell=True`, `os.system`).
+
+**2. Shared code is vetted, approved and pinned.** Reusable scripts enter a
+project's library only after static vetting blocks network access,
+subprocesses, dynamic code, credential access and obfuscated blobs, and a
+maintainer approves the pull request. Each tool is pinned by sha256, vetted
+again by every project that downloads it, and run in the sandbox
+([docs/toolbox.md](docs/toolbox.md)).
+
+**3. Nothing counts until others re-run it.** A producer's "done" is never
+evidence. In relay mode, at least two trusted verifiers fetch the exact
+commit, re-run the checks in their own sandboxes and sign matching receipts.
+**Proof of verification** means every producer must verify others' patches
+before their own counts, so review capacity grows with the fleet. Quorums can
+be required to span model families, so same-model blind spots don't add up.
+In GitHub mode, a trusted reviewer who isn't the author approves the exact
+head commit, and any new push voids the approval.
+
+**4. The checks can't be gamed.** The verification contract rejects escape
+hatches (`sorry` and new axioms in Lean, skipped tests), freezes the files
+that define what is being proved or measured, and runs must-fail controls:
+an argument that also "proves" a known-false case fails. Every verifier and
+the merge gate enforce it ([docs/research.md](docs/research.md)).
+
+**5. CI runs on a clean runner.** Nothing merges without green checks on
+GitHub's runners: tests on three operating systems, lint, CodeQL, the fleet
+simulation, the sandbox tests and the project's own `validate.command`. The
+queue never checks out or runs pull-request code with write access.
+
+**6. People own what matters.** Changes to workflows, `tools/ws/`, the agent
+rules, `workstead.json`, the shared library, dependency manifests, lockfiles,
+Dockerfiles and binaries, or very large diffs, always need a maintainer,
+re-checked on every push. A random 5% of merged results is sampled for a
+human audit, so the fleet's error rate is measured rather than assumed.
+
+**7. GitHub's own protections.** `./ws harden` turns on branch protection
+with required CI, code-owner review on the fleet-control paths, secret
+scanning and push protection, Dependabot, private vulnerability reporting, a
+read-only default workflow token and admin-only release tags. Every Action is
+pinned to a commit SHA.
+
+**8. Identity and trust are earned.** Contributors sign their work with their
+GitHub account or a Nostr key. On public projects trust is earned through
+merged work. New keys wait longer to claim, pay a proof-of-work cost, can
+hold at most 25% of open tasks, and lose their claims if they abandon
+leases. Contributors **without a GitHub account** can take part: the settle
+workflow rebuilds their verified patch byte for byte, refuses anything that
+touches protected, dependency or build files, and opens the pull request for
+them. A **shared safety net** stops every fleet trusting an account once two
+independent projects flag it.
+
+**9. The network can be slowed, never forged.** Every event is signed, and
+the queue state is a deterministic function of the signed events that every
+agent computes the same way. Relays are untrusted pipes: one that withholds
+or invents events can delay the work, but can't make bad code merge. Rate
+limits and proof of work bound spam, and backpressure stops new work while
+results wait for review ([docs/security.md](docs/security.md)).
+
+**10. Secrets stay home.** Keys live on the machine that made them, with file
+mode 0600. The sandbox never sees environment variables or tokens, logs are
+shared as token-free digests, and secret scanning blocks committed
+credentials.
+
+What it doesn't defend against: a maintainer who approves malicious changes,
+GitHub itself being compromised, or a sandbox escape in Deno, V8 or the
+container runtime. The layers above limit what any one of those can reach.
+The full threat model is in [docs/security.md](docs/security.md).
 
 ## Under the hood
 
@@ -324,19 +414,6 @@ agents and the jobs are tasks.
 | Checkpoint/restart | `ws checkpoint` pushes progress; the next agent resumes from it |
 | `squeue` `sinfo` `sprio` `sacct` | `ws queue` `ws nodes` `ws prio` `ws acct` |
 
-## Safety
-
-Workers act under their own GitHub accounts and keys, and only through `ws`
-or pull requests. Issue text is data that never overrides an agent's rules.
-On public repositories, trust is *earned*. Pull requests that touch
-workflows, the agent rules, dependencies, lockfiles, Dockerfiles or binaries
-always need a maintainer, re-checked on every push. Every GitHub Action is
-pinned to a commit SHA. `./ws harden` turns on code owners, required checks,
-secret scanning, push protection and Dependabot in one command, and a
-**shared safety net** lets maintainers flag malicious accounts so every fleet
-stops trusting them once two independent projects agree. Read
-[docs/security.md](docs/security.md).
-
 ## Give back, and learn together (on by default)
 
 Projects built on Workstead give **0.1% of their fleet's time** back to
@@ -381,6 +458,7 @@ On Windows use `tools\ws\ws.cmd`, or `python tools/ws/ws.py` anywhere.
 | [Concepts](docs/concepts.md) | The design, lifecycle and Slurm mapping (GitHub mode) |
 | [Relay mode](docs/relay.md) | Signed events, tiers, the mesh, claims, quorum, the Tangle, logs, keys |
 | [What frontier fleets taught us](docs/research.md) | Lessons from the 2025-26 lab fleets on Navier-Stokes, the zeta zeros and Erdős problems, and how Workstead applies them |
+| [Sandbox](docs/sandbox.md) | How scripts and checks run: WebAssembly first, rootless container fallback, never the host |
 | [Toolbox](docs/toolbox.md) | Reusable scripts: found, vetted, pinned and shared across projects |
 | [AWS seed](docs/aws.md) | Optional: a sandboxed, free-tier always-on relay for operators who want one |
 | [Protocol](docs/protocol.md) | Commands, labels, metadata and guarantees |
