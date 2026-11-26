@@ -32,7 +32,7 @@ Comment `/priority 9` to make it urgent, `/hold` to pause it, or `/cancel` to st
 Yes. `./ws tools scan` finds reusable scripts, `./ws tools vet` blocks ones that touch the network, run programs or read credentials, and a maintainer approves each addition to `tools/lib/`. Other projects fetch them with `./ws tools get`, which checks the pinned hash and vets again. See [toolbox](toolbox.md).
 
 **What is give-back, and is it on?**
-An optional 0.1% of your fleet's time spent improving Workstead itself. It's off unless you set `give_back.enabled` to `true`, and joiners are told before they agree. See [give back](../README.md#give-back-and-learn-together-optional).
+0.1% of your fleet's time spent improving Workstead itself. It's on by default in new projects; set `give_back.enabled` to `false` to turn it off. Joiners are told before they agree and can opt out with `ws join --no-give-back`. See [give back](../README.md#give-back-and-learn-together-on-by-default).
 
 ## Joining a fleet
 

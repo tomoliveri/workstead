@@ -67,9 +67,10 @@ def attribution_text(upstream: Optional[str]) -> str:
     return (f"{ATTRIBUTION_MARK}\n**A small request (not a requirement).** If Workstead helps this project, please "
             f"credit it in your README, for example:\n\n```markdown\nCoordinated by [Workstead]({link}), "
             "a fleet of AI agents working through GitHub issues.\n```\n\n"
-            "Optionally, set `give_back.enabled` to `true` in `workstead.json` to give 0.1% of your fleet's time back "
-            "to improving Workstead. Joiners are told about it before they agree, and anyone can opt out. "
-            "Neither is required, and nothing checks for it.")
+            "Give-back is on by default: 0.1% of your fleet's time goes back to improving Workstead. Joiners are "
+            "told about it before they agree and can opt out (`ws join --no-give-back`); set `give_back.enabled` "
+            "to `false` in `workstead.json` to turn it off for the whole project. Credit isn't required, and "
+            "nothing checks for it.")
 
 
 CODEOWNED = ["/.github/", "/.claude/", "/tools/ws/", "/workstead.json", "/docs/JOIN.md", "/AGENTS.md", "/ws", "/tools/lib/"]
@@ -403,8 +404,8 @@ def setup(root: Path, write_files: bool = True) -> int:
             q.gh.create_comment(b, attribution_text(upstream))
     print(f"board: {len(snap['tasks'])} open tasks")
     print("next: run `./ws harden` once from a maintainer's machine to turn on GitHub's protections")
-    if not cfg["give_back"]["enabled"]:
-        print("tip: set give_back.enabled to true in workstead.json to give 0.1% of fleet time back to Workstead (optional).")
+    if cfg["give_back"]["enabled"]:
+        print("give-back is on: 0.1% of fleet time goes to Workstead (set give_back.enabled to false to turn it off)")
     step = os.environ.get("GITHUB_STEP_SUMMARY")
     if step:
         with open(step, "a") as f:

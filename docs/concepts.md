@@ -124,7 +124,7 @@ instructions.
 
 ## Give-back
 
-If `give_back.enabled` is on, each worker keeps a local ledger of measured
+If `give_back.enabled` is on (the default), each worker keeps a local ledger of measured
 lease time. When `share` × hours worked exceeds what it has given (and at
 least `min_owed_hours`), `ws next` serves one task from the upstream Workstead
 repository through the same protocol, in a separate clone. At 0.1% that's

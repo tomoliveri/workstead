@@ -188,8 +188,9 @@ class Worker(unittest.TestCase):
         return c
 
     def test_consent_mentions_give_back_only_when_enabled(self):
-        off = W.consent_text(self.ctx())
+        off = W.consent_text(self.ctx(C.load(data={"repo": "acme/project", "give_back": {"enabled": False}})))
         self.assertNotIn("Give back", off)
+        self.assertIn("Give back 0.1%", W.consent_text(self.ctx()))  # on by default
         on = W.consent_text(self.ctx(C.load(data={"repo": "acme/project", "give_back": {"enabled": True}})))
         self.assertIn("Give back 0.1%", on)
         self.assertIn("workstead/workstead", on)
@@ -212,7 +213,7 @@ class Worker(unittest.TestCase):
 
     def test_give_back_disabled_or_self_is_never_targeted(self):
         W.ledger_add("acme/project", "work", 10 ** 7, "x")
-        self.assertIsNone(W.give_back_target(self.ctx()))
+        self.assertIsNone(W.give_back_target(self.ctx(C.load(data={"repo": "acme/project", "give_back": {"enabled": False}}))))
         self.w.template = "acme/project"
         cfg = C.load(data={"repo": "acme/project", "give_back": {"enabled": True}})
         self.assertIsNone(W.give_back_target(self.ctx(cfg)))

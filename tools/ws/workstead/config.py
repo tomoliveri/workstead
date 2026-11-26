@@ -142,7 +142,7 @@ DEFAULTS: Dict[str, Any] = {
     # learnings: give-back turns also carry this fleet's anonymous aggregate
     # queue statistics upstream (see workstead/learnings.py), so upstream work
     # targets the problems fleets actually have. Only when enabled is true.
-    "give_back": {"enabled": False, "share": 0.001, "upstream": "",
+    "give_back": {"enabled": True, "share": 0.001, "upstream": "",
                   "min_owed_hours": 0.5, "learnings": True},
     "board": {"title": "Workstead board", "branch": "ws-board"},
     # The verification contract (contract.py): what "passes" means beyond

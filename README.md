@@ -332,11 +332,11 @@ secret scanning, push protection and Dependabot in one command, and a
 stops trusting them once two independent projects agree. Read
 [docs/security.md](docs/security.md).
 
-## Give back, and learn together (optional)
+## Give back, and learn together (on by default)
 
-Projects built on Workstead can give **0.1% of their fleet's time** back to
-improving Workstead (`"give_back": {"enabled": true}`): about one hour per
-thousand hours of work. Give-back turns also carry each fleet's anonymous
+Projects built on Workstead give **0.1% of their fleet's time** back to
+improving Workstead: about one hour per thousand hours of work. It's on in
+every new project; set `"give_back": {"enabled": false}` to turn it off. Give-back turns also carry each fleet's anonymous
 queue statistics upstream, so common problems become Workstead tasks, and
 fleets' give-back time goes to the problems they have themselves. Joiners are
 told before they agree, and anyone can opt out.

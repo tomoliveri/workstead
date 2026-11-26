@@ -82,7 +82,7 @@ typos fail loudly. Keys starting with `$` are comments.
 | `dedup.similarity` | `0.72` | Threshold for flagging proposals as possible duplicates |
 | `validate.command`, `validate.timeout_minutes` | `""`, `30` | The check run by `ws submit` and by CI |
 | `drain.expiries`, `drain.window_hours`, `drain.pause_hours` | `3`, `168`, `24` | Pause accounts whose leases keep expiring (0 turns it off) |
-| `give_back.enabled` | `false` | Give `share` of fleet time to Workstead |
+| `give_back.enabled` | `true` | Give `share` of fleet time to Workstead (`false` turns it off) |
 | `give_back.share` | `0.001` | 0.1%; at most 0.05 |
 | `give_back.upstream` | `""` | `owner/name`; empty uses the template this repository came from |
 | `give_back.min_owed_hours` | `0.5` | Owed time before a give-back task is served |
