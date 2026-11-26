@@ -465,7 +465,8 @@ def _run_nested(job: Path, entry: str, argv: List[str], memory_mb: int, timeout:
               if a.startswith(("/input/", "/output/")) else a for a in argv]
     code, out, err, secs, peak, killed = _supervise(
         [sys.executable, "-I", "-B", str(job / "code" / entry), *mapped], memory_mb, timeout,
-        {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "TMPDIR", "PYTHONHASHSEED")})
+        {k: v for k, v in os.environ.items()
+         if k in ("PATH", "HOME", "LANG", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT", "PYTHONHASHSEED")})
     return Result(code, out, err, "nested (inside the sandbox container)", secs, peak, killed)
 
 
