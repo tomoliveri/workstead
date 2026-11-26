@@ -31,5 +31,11 @@
   "give_back": {
     "enabled": false,
     "share": 0.001
+  },
+  "relay": {
+    "publishers": [
+      "npub1u9ju9v0te84x3x6kzdp6fy5aqmpmdt02tt97vaf92vvxgwk00yfqtwcus4",
+      "npub1g445jgm7ua4qgkjftylpjx3x3rtm2f2qmc3hh898laj3nehtdurqf28uew"
+    ]
   }
 }
