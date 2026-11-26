@@ -357,7 +357,9 @@ def run_python(script: Path, inputs: Sequence[Path], output: Path, argv: Sequenc
     kind = choose(script, cfg, backend)
     job = make_job(script, [Path(i).resolve() for i in inputs])
     try:
-        if kind == "wasm":
+        if inside_sandbox():
+            res = _run_nested(job, script.name, list(argv), memory_mb, timeout)
+        elif kind == "wasm":
             res = _run_wasm(job, script.name, list(argv), memory_mb, timeout, packages)
         else:
             res = _run_container_python(job, script.name, list(argv), memory_mb, timeout, cfg)
@@ -394,7 +396,8 @@ def _container_base(exe: str, cfg: Dict[str, Any], memory_mb: int, name: str, ne
             "--memory", f"{memory_mb}m", "--memory-swap", f"{memory_mb}m", "--cpus", str(sb["cpus"]),
             "--tmpfs", f"/tmp:rw,size={int(sb['tmpfs_mb'])}m,mode=1777", "--ipc", "none",
             "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "PYTHONHASHSEED=0",
-            "-e", f"OMP_NUM_THREADS={sb['cpus']}", "-e", f"OPENBLAS_NUM_THREADS={sb['cpus']}"]
+            "-e", f"OMP_NUM_THREADS={sb['cpus']}", "-e", f"OPENBLAS_NUM_THREADS={sb['cpus']}",
+            "-e", f"{SANDBOX_ENV}={secrets.token_hex(8)}"]
     if not network:
         base += ["--network", "none"]
     if sb["gpus"] and platform.system() == "Linux" and os.path.basename(exe) == "docker":
@@ -402,8 +405,68 @@ def _container_base(exe: str, cfg: Dict[str, Any], memory_mb: int, name: str, ne
     return base
 
 
+def project_image(cfg: Dict[str, Any], root: Optional[Path] = None) -> Optional[Tuple[str, Path]]:
+    """(tag, dockerfile) for sandbox.dockerfile: tagged by the hash of its directory, so a change rebuilds it."""
+    rel = cfg["sandbox"]["dockerfile"]
+    if not rel:
+        return None
+    from .config import find_root
+    df = (root or find_root()) / rel
+    if not df.is_file():
+        return None
+    h = hashlib.sha256()
+    for p in sorted(df.parent.rglob("*")):
+        if p.is_file() and not p.is_symlink():
+            h.update(p.relative_to(df.parent).as_posix().encode() + b"\0" + p.read_bytes())
+    slug = re.sub(r"[^a-z0-9]+", "-", (cfg.get("repo") or "project").lower()).strip("-")[:40] or "project"
+    return f"ws-sandbox-{slug}:{h.hexdigest()[:12]}", df
+
+
+def build_image(cfg: Dict[str, Any], root: Optional[Path] = None, quiet: bool = False) -> Optional[str]:
+    """Build the project's image (the engine runs the build in its own containers, not on the host)."""
+    pi = project_image(cfg, root)
+    eng = container_engine(cfg)
+    if not pi or not eng:
+        return None
+    tag, df = pi
+    exe = eng[0]
+    if subprocess.run([exe, "image", "inspect", tag], capture_output=True).returncode == 0:
+        return tag
+    if not quiet:
+        print(f"building the project's sandbox image {tag} from {df} ...")
+    r = subprocess.run([exe, "build", "-t", tag, "-f", str(df), str(df.parent)],
+                       capture_output=quiet, timeout=3600)
+    if r.returncode != 0:
+        raise SandboxError(f"building {tag} failed")
+    return tag
+
+
 def _image(cfg: Dict[str, Any]) -> str:
-    return cfg["sandbox"]["image"] or DEFAULT_IMAGE
+    if cfg["sandbox"]["image"]:
+        return cfg["sandbox"]["image"]
+    pi = project_image(cfg)
+    return pi[0] if pi else DEFAULT_IMAGE
+
+
+SANDBOX_ENV = "WS_SANDBOX_TOKEN"
+
+
+def inside_sandbox() -> bool:
+    """True only inside a container this module started: its token and the engine's own marker file."""
+    return bool(os.environ.get(SANDBOX_ENV)) and (Path("/.dockerenv").exists() or Path("/run/.containerenv").exists())
+
+
+def _run_nested(job: Path, entry: str, argv: List[str], memory_mb: int, timeout: float) -> Result:
+    """Already inside a sandbox container (a project check that runs a study): run the script here.
+
+    /input and /output in the arguments point into this job's directories.
+    """
+    mapped = [a.replace("/input/", f"{job / 'input'}/").replace("/output/", f"{job / 'output'}/")
+              if a.startswith(("/input/", "/output/")) else a for a in argv]
+    code, out, err, secs, peak, killed = _supervise(
+        [sys.executable, "-I", "-B", str(job / "code" / entry), *mapped], memory_mb, timeout,
+        {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "TMPDIR", "PYTHONHASHSEED")})
+    return Result(code, out, err, "nested (inside the sandbox container)", secs, peak, killed)
 
 
 def _run_container_python(job: Path, entry: str, argv: List[str], memory_mb: int, timeout: float,
@@ -489,7 +552,10 @@ def cmd_sandbox(ctx, args) -> int:
     if args.what == "setup":
         try:
             setup(list(cfg["sandbox"]["packages"]) + list(args.packages or []))
-        except (SandboxError, subprocess.CalledProcessError) as e:
+            tag = build_image(cfg)
+            if tag:
+                print(f"Project sandbox image: {tag}")
+        except (SandboxError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             print(f"ws: {e}", file=sys.stderr)
             return 1
         b = backends(cfg)

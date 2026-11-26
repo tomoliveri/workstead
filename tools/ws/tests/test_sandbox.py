@@ -48,6 +48,24 @@ class NothingRunsOnTheHost(unittest.TestCase):
             self.assertNotIn(f'"{forbidden}', cmd)
 
 
+class Nested(unittest.TestCase):
+    def test_host_cannot_claim_to_be_inside_the_sandbox(self):
+        os.environ[SB.SANDBOX_ENV] = "x"
+        try:
+            marker = Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+            self.assertEqual(SB.inside_sandbox(), marker)  # the env var alone is never enough
+        finally:
+            del os.environ[SB.SANDBOX_ENV]
+
+    def test_nested_run_maps_input_and_output(self):
+        job = SB.make_job(script("import sys\nopen(sys.argv[2], 'w').write(open(sys.argv[1]).read().upper())\n"),
+                          [])
+        (job / "input" / "a.txt").write_text("hi")
+        res = SB._run_nested(job, "main.py", ["/input/a.txt", "/output/b.txt"], 512, 60)
+        self.assertEqual(res.code, 0, res.stderr)
+        self.assertEqual((job / "output" / "b.txt").read_text(), "HI")
+
+
 class Choosing(unittest.TestCase):
     def test_backend_follows_the_imports(self):
         self.assertEqual(SB.choose(script("import json, math\n"), CFG), "wasm")

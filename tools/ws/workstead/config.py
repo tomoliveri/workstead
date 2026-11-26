@@ -155,11 +155,13 @@ DEFAULTS: Dict[str, Any] = {
     # scripts needing native packages and the project's checks run in a
     # rootless container with no network. memory_mb and timeout_seconds are
     # hard limits per job. image: the container image (pin it by digest; it
-    # needs what validate.command uses). packages: Pyodide packages that
+    # needs what validate.command uses). dockerfile: build the project's own
+    # image instead (tagged by its content hash; `ws sandbox setup` builds
+    # it). packages: Pyodide packages that
     # `ws sandbox setup` fetches. engine: auto | podman | docker. gpus: pass
     # NVIDIA GPUs to containers (Linux, Docker).
     "sandbox": {"memory_mb": 2048, "timeout_seconds": 1800, "cpus": 2, "tmpfs_mb": 1024, "engine": "auto",
-                "image": "", "packages": [], "allow_rootful": False, "gpus": False},
+                "image": "", "dockerfile": "", "packages": [], "allow_rootful": False, "gpus": False},
     # The toolbox (toolbox.py): vetted reusable scripts. path: the library
     # (protected: changes need a maintainer). scan/ignore: where `ws tools
     # scan` looks for candidates. allow_imports: third-party modules tools
@@ -324,6 +326,8 @@ def validate(cfg: Dict[str, Any]) -> None:
     if not (64 <= int(sb["memory_mb"]) <= 262144 and 1 <= int(sb["timeout_seconds"]) <= 86400
             and 0 < float(sb["cpus"]) <= 256 and 16 <= int(sb["tmpfs_mb"]) <= 262144):
         raise ConfigError("sandbox limits: memory_mb 64-262144, timeout_seconds 1-86400, cpus > 0, tmpfs_mb 16+")
+    if sb["dockerfile"] and (".." in sb["dockerfile"].split("/") or sb["dockerfile"].startswith("/")):
+        raise ConfigError("sandbox.dockerfile must be a path inside the repository")
     if sb["image"] and not re.match(r"^[a-z0-9./_:-]+(@sha256:[0-9a-f]{64})?$", sb["image"]):
         raise ConfigError("sandbox.image must be an image reference (pin it with @sha256:...)")
     tb = cfg["toolbox"]

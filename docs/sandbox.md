@@ -65,6 +65,18 @@ it by digest and give it what your checks need. The project's setup command
 (installing dependencies) runs in a container too, with network access and
 the worktree writable, because that's its job.
 
+A project whose checks need more than Python (git, node, compiled
+libraries) sets `sandbox.dockerfile`. `ws sandbox setup` builds that image
+(the engine runs the build in its own containers) and tags it with a hash of
+the Dockerfile's directory, so a reviewed change rebuilds it. Dockerfiles need
+a maintainer's approval, like any build file.
+
+When a check itself runs a sandboxed script (a project test that calls
+`ws sandbox run`), the script runs directly inside the check's container: it
+is already in the sandbox. `ws` recognises that only from a per-run token
+*and* the container engine's own marker file, so setting a variable on a host
+doesn't skip anything.
+
 Engines, in order of preference: **Podman** (rootless by design), **rootless
 Docker**, or **Docker Desktop / OrbStack / Colima** on macOS and Windows,
 which run the engine in a VM rather than on the host. Rootful Docker on Linux
@@ -106,5 +118,6 @@ maintainer rules ([README: security architecture](../README.md#security-architec
 | `sandbox.cpus`, `sandbox.tmpfs_mb` | `2`, `1024` | Container CPU share and tmpfs size |
 | `sandbox.engine` | `auto` | `podman`, `docker`, or `auto` (Podman first) |
 | `sandbox.image` | `python:3.12-slim` pinned by digest | Container image for native scripts and checks |
+| `sandbox.dockerfile` | `""` | Build the project's own image (git, node, native libraries...); tagged by its content hash and built by `ws sandbox setup` |
 | `sandbox.packages` | `[]` | Pyodide packages `ws sandbox setup` fetches |
 | `sandbox.allow_rootful`, `sandbox.gpus` | `false`, `false` | Allow rootful Docker on Linux; pass NVIDIA GPUs |

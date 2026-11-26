@@ -74,6 +74,9 @@ jobs:
     name: Sandbox (WebAssembly and rootless container)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      WS_HOME: ${{ github.workspace }}/../ws-home
+      WS_TEST_CONTAINER: "1"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -87,15 +90,11 @@ jobs:
       - name: Fetch Pyodide (hash-checked)
         run: python tools/ws/ws.py sandbox setup numpy
       - name: Escape attempts, limits and container isolation
-        env:
-          WS_TEST_CONTAINER: "1"
-          WS_HOME: ${{ runner.temp }}/ws-test-home
         run: |
-          mkdir -p "$WS_HOME" && cp -R ~/.workstead/sandbox "$WS_HOME/"
           python tools/ws/ws.py sandbox doctor
           python -m unittest discover -s tools/ws/tests -p test_sandbox.py -v
 
-
+  simulate:
     name: Fleet simulation
     runs-on: ubuntu-latest
     timeout-minutes: 15
