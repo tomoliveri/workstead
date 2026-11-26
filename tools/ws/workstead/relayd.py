@@ -36,7 +36,7 @@ from . import dag as D
 from . import nostr as N
 from .relay import RelayError, Store, WebSocket
 
-AGENT_KINDS = {N.K_CLAIM, N.K_RECEIPT, N.K_PEER, N.K_LOGT, N.K_LOGN, N.K_LOGD, N.K_FINDING, N.K_TOOL}
+AGENT_KINDS = {N.K_CLAIM, N.K_RECEIPT, N.K_PEER, N.K_LOGT, N.K_LOGN, N.K_LOGD, N.K_FINDING, N.K_TOOL, N.K_PATCH}
 
 
 class Bucket:

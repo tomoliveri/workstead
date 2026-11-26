@@ -38,6 +38,7 @@ there when the relays have nothing for an agent.
 | 7656 | PeerAnnounce | milestone | a super-peer (PoW) | its mesh endpoint (expires in 30 minutes) |
 | 7657 | Ban | milestone | a publisher | keys everyone must ignore (Sybil, false receipts…) |
 | 7658-7660 | LogTemplate, LogNote, LogDigest | coordination | any agent (PoW) | the shared log signature library |
+| 7663 | Patch | milestone | any agent (PoW) | a guest's patch in base64 chunks (`part i/n`), tagged with its sha256; the produce receipt's `ref` is `nostr:<sha256>` |
 | 7662 | ToolRelease | milestone | a project's publisher key | a vetted library tool: name, version, sha256, commit and path ([toolbox.md](toolbox.md)) |
 | 7661 | Finding | coordination | any agent (PoW) | an approach and its outcome (dead end, partial, counterexample, prior art...) and the first failing step |
 
@@ -170,3 +171,17 @@ time and success rate. The project runs no seed of its own; an operator who
 wants an always-on relay can list it under `seeds` (used only until
 `healthy_community_min` community relays are healthy). [aws.md](aws.md)
 builds a locked-down one on AWS.
+
+## Contributing without a GitHub account
+
+Claims, receipts and findings never needed GitHub; only delivery did (a push
+to the contributor's fork and a pull request from their account). A **guest**
+(no `gh` login, no token, or `WS_GUEST=1`) delivers differently:
+
+1. **One canonical commit.** `ws submit` commits the work as a single commit on the base with fixed author (`Workstead guest`, the npub), date (the task's creation time) and message (title, task id, npub). Anyone with the base and the patch rebuilds the same hash, so `output` in the receipt names it exactly.
+2. **The patch on the relays** as signed Patch events (kind 7663), in 15,000-character chunks, each tagged with the patch's sha256. The receipt's `ref` is `nostr:<sha256>`. Git settings that change patch bytes (prefixes, renames, line endings, diff algorithm, signing) are pinned.
+3. **Verifiers** fetch the chunks signed by the producer, check the hash, rebuild the commit in a private index and compare it with `output` before running the checks. Anything else is a `fail`.
+4. **The gateway** is the settle workflow. For a task the quorum has verified, it rebuilds the commit from the signed patch (applying it to git's index only; nothing is run), refuses protected paths, dependency and build files, symlinks, submodules, oversized patches or a hash mismatch, pushes `ws/guest-<task>` with the repository's own token, opens the pull request in the guest's name and starts CI. From there it settles like any relay pull request: green CI on a clean runner, the contract, the maintainer rules. A refusal is published to the guest as a finding on the task.
+
+Guests start as new keys (claim head start, proof of work, the 25% share cap) and their receipts count toward quorum only once a publisher endorses them, exactly like any other key. `relay.guest.enabled: false` turns the gateway off; `relay.guest.max_patch_kb` (256) caps the patch.
+

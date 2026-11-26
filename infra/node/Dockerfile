@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/opt/workstead
 COPY tools/ws/workstead/__init__.py tools/ws/workstead/relayd.py tools/ws/workstead/relay.py \
      tools/ws/workstead/nostr.py tools/ws/workstead/schnorr.py tools/ws/workstead/dag.py \
      tools/ws/workstead/logs.py tools/ws/workstead/config.py tools/ws/workstead/announce.py \
-     tools/ws/workstead/gh.py tools/ws/workstead/findings.py tools/ws/workstead/toolbox.py \
+     tools/ws/workstead/gh.py tools/ws/workstead/findings.py tools/ws/workstead/toolbox.py tools/ws/workstead/guest.py \
      /opt/workstead/workstead/
 RUN mkdir -p /data /keys && chown 65534:65534 /data /keys && chmod 0700 /keys
 USER 65534:65534

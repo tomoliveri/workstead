@@ -51,6 +51,24 @@ REF is an issue number or owner/name#N.
 """
 
 
+GUEST_OK = {"consent", "join", "next", "claim", "show", "beat", "submit", "verify", "status", "stop", "queue", "nodes",
+            "prio", "learnings", "acct"}
+
+
+def _guest_blocked(ctx, args) -> str:
+    """Why a guest (no GitHub account) can't run this command here, or ""."""
+    if args.cmd not in GUEST_OK:
+        return (f"`ws {args.cmd}` needs a GitHub account. Without one you can claim, do and verify relay tasks "
+                "(ws next / claim / submit / verify), record findings and use shared tools; log in with "
+                "`gh auth login` for the rest.")
+    if ctx.cfg["driver"] != "nostr" and args.cmd not in ("consent", "status", "stop", "queue", "learnings"):
+        return ("this project only takes contributions through GitHub so far: its maintainers haven't turned on "
+                "relay mode (`./ws harden`). Log in with `gh auth login` to contribute, or try again later.")
+    if "#" in str(getattr(args, "ref", "") or ""):
+        return "issue-queue tasks need a GitHub account; `ws next` offers the relay tasks you can take."
+    return ""
+
+
 def _tool_flags(args, rest):
     """`ws tools` takes its flags anywhere; for `run`, everything after NAME (and an optional --) is the tool's."""
     if args.what == "run":
@@ -235,6 +253,11 @@ def main(argv=None) -> int:
         if args.cmd == "logs" and args.what in ("note", "explain"):
             args.sig = args.sig or args.file
         return {"keygen": DRV.cmd_keygen, "relay": DRV.cmd_relay, "logs": DRV.cmd_logs}[args.cmd](ctx, args, W.HOME)
+    if getattr(ctx, "guest", False):
+        blocked = _guest_blocked(ctx, args)
+        if blocked:
+            print(f"ws: {blocked}", file=sys.stderr)
+            return 4
     github_ref = "#" in str(getattr(args, "ref", "") or "")  # plans and written results stay on the issues queue
     if ctx.cfg["driver"] == "nostr" and args.cmd in ("next", "claim", "show", "beat", "submit", "verify") \
             and not (github_ref and args.cmd != "verify"):

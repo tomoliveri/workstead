@@ -366,6 +366,15 @@ def actions_settle(root: Path) -> int:
     relays = relays_for(cfg, Path(tempfile.mkdtemp()), probe=False)
     key = gate_key_from_env()
     pr = os.environ.get("WS_PR", "")
+    if not pr.isdigit():
+        # The guest gateway: verified results from contributors without a GitHub
+        # account become pull requests here (guest.py), then settle like any other.
+        from .guest import open_guest_prs
+        try:
+            for g in open_guest_prs(q, relays, relays.snapshot(f"https://github.com/{q.gh.repo}"), key):
+                print(json.dumps(g))
+        except Exception as e:  # never block settlement of the other pull requests
+            print(f"guest gateway skipped: {e}")
     results = [settle_pr(q, relays, int(pr), gate_key=key)] if pr.isdigit() else settle_open(q, relays, key)
     for r in results:
         print(json.dumps(r))

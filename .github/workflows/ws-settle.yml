@@ -7,6 +7,10 @@
 # author passed proof-of-verification. Then it checks CI is green (the clean
 # runner that applied and tested the patch) and the maintainer rules, and
 # merges or flags the PR for a human. It never checks out or runs PR code.
+# It is also the guest gateway: results verified by the quorum from
+# contributors without a GitHub account are rebuilt from their signed patch
+# (applied to git's index only, never run), checked against the verified
+# commit, pushed as ws/guest-<task> and opened as pull requests.
 # With the github-issues driver it exits immediately.
 name: Workstead settle
 
@@ -36,6 +40,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      actions: write   # start CI on guest pull requests (pushes with this token don't trigger workflows)
       checks: read
       statuses: read
     runs-on: ubuntu-latest

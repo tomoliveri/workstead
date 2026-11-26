@@ -111,8 +111,10 @@ def _pr(d: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class GitHub:
-    def __init__(self, repo: str, tok: Optional[str] = None, min_remaining: int = 50, api: str = ""):
+    def __init__(self, repo: str, tok: Optional[str] = None, min_remaining: int = 50, api: str = "",
+                 anonymous: bool = False):
         self.repo = repo
+        self.anonymous = anonymous  # guests: public reads only, no token (60 requests an hour)
         self.api = (api or API).rstrip("/")
         self._token = tok
         self.min_remaining = min_remaining
@@ -125,18 +127,21 @@ class GitHub:
 
     @property
     def tok(self) -> str:
+        if self.anonymous:
+            return ""
         if not self._token:
             self._token = token()
         return self._token
 
     def request(self, method: str, path: str, body: Any = None, accept: str = "application/vnd.github+json",
                 raw: bool = False, tries: int = 5) -> Any:
-        if self.via_gh:
+        if self.via_gh and not self.anonymous:
             return self._request_gh(method, path, body, accept, raw)
         try:
             return self._request(method, path, body, accept, raw, tries)
         except GitHubError as e:
-            if e.status == 0 and "CERTIFICATE_VERIFY_FAILED" in str(e) and not self._token_from_env():
+            if e.status == 0 and "CERTIFICATE_VERIFY_FAILED" in str(e) and not self._token_from_env() \
+                    and not self.anonymous:
                 self.via_gh = True
                 return self._request_gh(method, path, body, accept, raw)
             raise
@@ -178,7 +183,8 @@ class GitHub:
         delay = 2.0
         for attempt in range(tries):
             req = urllib.request.Request(url, data=data, method=method)
-            req.add_header("Authorization", f"Bearer {self.tok}")
+            if self.tok:
+                req.add_header("Authorization", f"Bearer {self.tok}")
             req.add_header("Accept", accept)
             req.add_header("User-Agent", UA)
             req.add_header("X-GitHub-Api-Version", "2022-11-28")

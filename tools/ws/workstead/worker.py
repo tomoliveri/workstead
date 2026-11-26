@@ -149,7 +149,9 @@ class Ctx:
         self.repo = repo or self.cfg["repo"] or os.environ.get("GITHUB_REPOSITORY") or detect_repo(root)
         if not self.repo:
             raise WsError("can't tell which GitHub repository this is; set \"repo\" in workstead.json")
-        self.gh = gh or GitHub(self.repo)
+        from .guest import is_guest
+        self.guest = gh is None and is_guest()
+        self.gh = gh or GitHub(self.repo, anonymous=self.guest)
         self._me: Optional[str] = None
         self._info: Optional[Dict[str, Any]] = None
         self._trusted: Optional[bool] = None
@@ -157,7 +159,12 @@ class Ctx:
     @property
     def me(self) -> str:
         if self._me is None:
-            self._me = os.environ.get("WS_LOGIN") or self.gh.me()
+            if getattr(self, "guest", False):
+                from .driver import load_or_create_key
+                from .guest import login_for
+                self._me = login_for(load_or_create_key(HOME)[1])
+            else:
+                self._me = os.environ.get("WS_LOGIN") or self.gh.me()
         return self._me
 
     @property
@@ -168,6 +175,8 @@ class Ctx:
 
     @property
     def trusted(self) -> bool:
+        if self._trusted is None and getattr(self, "guest", False):
+            self._trusted = False  # guests start as new keys; trust comes from verified work on the relays
         if self._trusted is None:
             t = self.cfg["trust"]
             mode = t["mode"] if t["mode"] != "auto" else ("open" if self.info["private"] else "earned")
@@ -331,7 +340,7 @@ def still_mine(ctx: Ctx, item: Dict[str, Any]) -> bool:
 
 def give_back_target(ctx: Ctx) -> Optional[str]:
     gb = ctx.cfg["give_back"]
-    if not gb["enabled"] or float(gb["share"]) <= 0 or profile().get("give_back") is False:
+    if not gb["enabled"] or float(gb["share"]) <= 0 or profile().get("give_back") is False or getattr(ctx, "guest", False):
         return None
     up = gb["upstream"] or ctx.info.get("template")
     if not up or up.lower() == ctx.repo.lower():
@@ -1113,7 +1122,9 @@ def needed_installs(ctx: Ctx) -> List[str]:
     need = []
     if not shutil.which("git"):
         need.append("git")
-    if not shutil.which("gh"):
+    if getattr(ctx, "guest", False) and ctx.cfg["driver"] == "nostr":
+        pass  # no GitHub account needed: guests deliver through the relays
+    elif not shutil.which("gh"):
         need.append("the GitHub CLI (`gh`)")
     elif subprocess.run(["gh", "auth", "status"], capture_output=True).returncode != 0 and not os.environ.get("GH_TOKEN"):
         need.append("a one-time GitHub sign-in in your browser (`gh auth login`)")
@@ -1134,9 +1145,13 @@ def consent_points(ctx: Ctx) -> List[str]:
          f"https://github.com/{ctx.repo}, verify it, submit it, and take the next one, around the clock, until the "
          "project is finished or you say stop. I review other agents' work and plan large jobs into small tasks too."
          + (f" In each task I run the project's setup command (`{setup_cmd}`)." if setup_cmd else "")),
-        ("**Post under your GitHub account, approved once now.** Short commands on issues (`/claim`, results, plans), "
-         "pull requests with my work, reviews, and issues for problems I find. You won't be asked again. Heartbeats "
-         "edit one comment, so they don't add noise."),
+        (("**No GitHub account needed.** I'll sign my work with a key I create on this computer (its public name, "
+          "an npub, is shown with everything I contribute). The project opens the pull request for my work after "
+          "other agents verify it. I can only take tasks that change code or data, not ones that need a GitHub "
+          "comment.") if getattr(ctx, "guest", False) else
+         ("**Post under your GitHub account, approved once now.** Short commands on issues (`/claim`, results, plans), "
+          "pull requests with my work, reviews, and issues for problems I find. You won't be asked again. Heartbeats "
+          "edit one comment, so they don't add noise.")),
         ("**Install only what's listed below, now.** After this I won't install anything else or ask you anything: "
          "if a task needs a tool this machine doesn't have, I hand the task back for another agent."),
         ("**Keep your machine and data private.** No sudo, no system changes, nothing outside the project. I never "
@@ -1147,7 +1162,7 @@ def consent_points(ctx: Ctx) -> List[str]:
                       "them as small Nostr events, on public relays and a peer-to-peer mesh of other agents. If this "
                       "computer can accept connections, it may become a super-peer for a while (a small relay for other "
                       "agents, using a little bandwidth and nothing else).")
-    if gb["enabled"]:
+    if gb["enabled"] and not getattr(ctx, "guest", False):
         learn = (" Those turns also share this fleet's anonymous queue statistics (counts and rates only: no names, "
                  "titles or code) so that Workstead improves where fleets struggle." if gb["learnings"] else "")
         points.append(f"**Give back {float(gb['share']) * 100:g}%.** The project owner chose to give "
@@ -1240,21 +1255,33 @@ def cmd_doctor(ctx_or_none, args, root: Path) -> int:
 
     line(sys.version_info >= (3, 9), f"python {platform.python_version()}", "install Python 3.9 or newer")
     line(bool(shutil.which("git")), "git installed", "install git")
-    line(bool(shutil.which("gh")), "GitHub CLI installed", "install it from https://cli.github.com")
-    authed = False
-    if shutil.which("gh"):
-        authed = subprocess.run(["gh", "auth", "status"], capture_output=True).returncode == 0
-    line(authed or bool(os.environ.get("GH_TOKEN")), "GitHub CLI signed in",
-         "gh auth login --web --hostname github.com --git-protocol https")
     try:
         cfg = C.load(root)
-        line(True, f"workstead.json valid ({len(cfg['partitions'])} partitions)")
     except (C.ConfigError, ValueError) as e:
         line(False, f"workstead.json: {e}")
         return 1
+    from .guest import is_guest
+    guest = is_guest() and cfg["driver"] == "nostr" and cfg["relay"]["guest"]["enabled"]
+    authed = False
+    if guest:
+        print("ok   no GitHub account needed: guest mode (your work is signed with a key on this computer, and the "
+              "project opens pull requests for it after verification)")
+    else:
+        line(bool(shutil.which("gh")), "GitHub CLI installed", "install it from https://cli.github.com")
+        if shutil.which("gh"):
+            authed = subprocess.run(["gh", "auth", "status"], capture_output=True).returncode == 0
+        line(authed or bool(os.environ.get("GH_TOKEN")), "GitHub CLI signed in",
+             "gh auth login --web --hostname github.com --git-protocol https" + (
+                 "" if cfg["driver"] == "nostr" else
+                 " (this project hasn't turned on relay mode, so it needs a GitHub account)"))
+    line(True, f"workstead.json valid ({len(cfg['partitions'])} partitions)")
     if ctx_or_none is None:
         line(False, "GitHub repository detected", "run ws inside a clone of the project (with an origin remote), or set \"repo\" in workstead.json")
-    if ctx_or_none is not None and (authed or os.environ.get("GH_TOKEN")):
+    if ctx_or_none is not None and guest:
+        joined = bool(profile().get("consents", {}).get(ctx_or_none.repo))
+        print(f"ok   repository {ctx_or_none.repo} as {ctx_or_none.me} (guest)")
+        print(f"{'ok  ' if joined else 'todo'} joined: {'yes' if joined else 'run `ws consent`, ask the person, then `ws join --confirmed`'}")
+    if ctx_or_none is not None and not guest and (authed or os.environ.get("GH_TOKEN")):
         c = ctx_or_none
         try:
             line(True, f"repository {c.repo} as @{c.me} ({'can push' if c.info['can_push'] else 'will use a fork'})")

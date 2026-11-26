@@ -240,6 +240,11 @@ DEFAULTS: Dict[str, Any] = {
         # where workers push result branches; "" = their fork of the repository
         "push_remote": "",
         # run verification inside a container without network ("docker") or not ("none")
+        # Contributing without a GitHub account (guest.py): guests publish
+        # their patch as signed events and the settle workflow opens the pull
+        # request after the quorum verifies it. Protected, dependency and
+        # build files are always refused for guests.
+        "guest": {"enabled": True, "max_patch_kb": 256},
         "verify_sandbox": "none",
         "sandbox_image": "python:3.12-slim",
     },

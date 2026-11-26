@@ -78,6 +78,9 @@ class RealGit(GitOps):
         self.cfg = cfg
         self.push_url = push_url
         self.validate = validate
+        self.guest_pk = ""  # set for guests: deliver the patch as signed events instead of pushing
+        self.publish_patch = None  # guests: callable(task_id, patch_bytes)
+        self.fetch_patch = None  # callable(patch_hash, producer) -> bytes or None
 
     def _git(self, *args: str, cwd: Optional[Path] = None, check: bool = True) -> subprocess.CompletedProcess:
         r = subprocess.run(["git", *args], cwd=str(cwd or self.root), capture_output=True, text=False)
@@ -123,6 +126,8 @@ class RealGit(GitOps):
         return problems
 
     def produce(self, task):
+        if self.guest_pk:
+            return self._produce_guest(task)
         wt = self.worktree(task)
         self._git("add", "-A", cwd=wt)
         if self._git("diff", "--cached", "--quiet", cwd=wt, check=False).returncode != 0:
@@ -143,7 +148,67 @@ class RealGit(GitOps):
         self._git("push", "--quiet", "--force", self.push_url, f"HEAD:refs/heads/{branch}", cwd=wt)
         return base, output, patch, tests, verdict, f"{self.push_url}#{branch}"
 
+    def _produce_guest(self, task):
+        """One canonical commit on the base, delivered as signed patch events (guest.py)."""
+        from . import guest as G
+        wt = self.worktree(task)
+        self._git("add", "-A", cwd=wt)
+        base = self._git("merge-base", "HEAD", f"origin/{self.cfg['default_branch']}", cwd=wt).stdout.decode().strip()
+        if self._git("merge-base", "--is-ancestor", task["base"], base, cwd=wt, check=False).returncode != 0:
+            raise RuntimeError("your base doesn't contain the task's base commit; fetch and rebase")
+        tree = self._git("write-tree", cwd=wt).stdout.decode().strip()  # staged work, committed or not
+        if tree == self._git("rev-parse", f"{base}^{{tree}}", cwd=wt).stdout.decode().strip():
+            raise RuntimeError("there are no changes to submit")
+        title = (task.get("spec") or {}).get("title", "")
+        output = G.canonical_commit(wt, tree, base, title, task["id"], self.guest_pk, task["created_at"])
+        self._git("reset", "--quiet", "--soft", output, cwd=wt)
+        patch_bytes = G.diff(wt, base, output)
+        if G.rebuild(wt, base, patch_bytes, title, task["id"], self.guest_pk, task["created_at"]) != output:
+            raise RuntimeError("the patch doesn't rebuild the same commit (unusual file names or modes?)")
+        why = G.problems(self.cfg, patch_bytes)
+        if why:
+            raise RuntimeError("without a GitHub account this change can't be delivered:\n- " + "\n- ".join(why))
+        problems = self.contract_problems(wt, base, output, task)
+        if problems:
+            raise RuntimeError("the change breaks the verification contract:\n- " + "\n- ".join(problems))
+        tests, verdict = self.run_checks(wt)
+        patch = _sha256(patch_bytes)
+        self.publish_patch(task["id"], patch_bytes)
+        return base, output, patch, tests, verdict, f"{G.REF_PREFIX}{patch}"
+
+    def _fetch_guest(self, ref, base, output, task) -> Optional[str]:
+        """Rebuild a guest's commit from its signed patch; returns the commit or None if it doesn't match."""
+        from . import guest as G
+        h = ref[len(G.REF_PREFIX):]
+        data = self.fetch_patch(h, task["producer"]) if self.fetch_patch else None
+        if data is None:
+            return None
+        self._git("fetch", "--quiet", "origin", self.cfg["default_branch"])
+        if self._git("cat-file", "-e", f"{base}^{{commit}}", check=False).returncode != 0:
+            return None
+        got = G.rebuild(self.root, base, data, (task.get("spec") or {}).get("title", ""), task["id"],
+                        task["producer"], task["created_at"])
+        return got if got == output else None
+
     def verify(self, ref, base, output, task):
+        from . import guest as G
+        if ref.startswith(G.REF_PREFIX):
+            wt = self.root / ".ws" / "verify" / output[:16]
+            if not (wt / ".git").exists():
+                if self._fetch_guest(ref, base, output, task) is None:
+                    return _sha256(b"mismatch"), N.tests_hash(""), "fail"  # parts missing or not the signed commit
+                wt.parent.mkdir(parents=True, exist_ok=True)
+                self._git("worktree", "add", "--detach", str(wt), output)
+            ok_base = self._git("merge-base", "--is-ancestor", task["base"], base, cwd=wt, check=False).returncode == 0
+            if not ok_base:
+                return _sha256(b"bad-base"), N.tests_hash(""), "fail"
+            patch = _sha256(G.diff(wt, base, output))
+            tests, verdict = self.run_checks(wt)
+            problems = self.contract_problems(wt, base, output, task) + G.problems(self.cfg, G.diff(wt, base, output))
+            if problems:
+                self.last_log += "\nverification contract:\n" + "\n".join(problems)
+                verdict = "fail"
+            return patch, tests, verdict
         url, _, branch = ref.partition("#")
         wt = self.root / ".ws" / "verify" / output[:16]
         if not (wt / ".git").exists():
@@ -368,10 +433,24 @@ def make_agent(ctx, home: Path):
     from .mesh import Mesh
     sk, pk = load_or_create_key(home)
     relays = relays_for(ctx.cfg, home)
-    push = ctx.cfg["relay"]["push_remote"] or f"https://github.com/{ctx.me}/{ctx.repo.split('/')[1]}.git"
+    guest = getattr(ctx, "guest", False)
+    push = ctx.cfg["relay"]["push_remote"] or ("" if guest else f"https://github.com/{ctx.me}/{ctx.repo.split('/')[1]}.git")
     git = RealGit(ctx.root, ctx.cfg, push, ctx.cfg["validate"]["command"])
     mesh = Mesh(ctx.cfg, sk, pk, repo_url(ctx.repo), relays)
-    return RelayAgent(ctx.cfg, sk, relays, repo_url(ctx.repo), git, mesh=mesh)
+    agent = RelayAgent(ctx.cfg, sk, relays, repo_url(ctx.repo), git, mesh=mesh)
+    from . import guest as G
+    limit = int(ctx.cfg["relay"]["guest"]["max_patch_kb"]) * 1024
+    git.fetch_patch = lambda h, producer: G.fetch_patch(relays, h, producer, limit)
+    if guest and not ctx.cfg["relay"]["push_remote"]:
+        git.guest_pk = pk
+
+        def publish(task_id: str, data: bytes) -> None:
+            ttl = int(ctx.cfg["relay"]["milestone_ttl_days"]) * 86400
+            for ev in G.patch_events(sk, repo_url(ctx.repo), task_id, data, agent.now(),
+                                     pow_bits=ctx.cfg["relay"]["pow_bits"], ttl=ttl):
+                relays.publish(ev)
+        git.publish_patch = publish
+    return agent
 
 
 def _out(obj: Dict[str, Any]) -> None:
@@ -384,11 +463,14 @@ def cmd_next(ctx, args, home: Path) -> int:
     if item is None:
         # Plans (a Job's breakdown) and written results stay on the issues
         # queue: look there before idling. One board read, usually from the CDN.
+        # Guests can't post GitHub comments, so they only take relay work.
         from . import worker as W
-        try:
-            choice, info = W.pick(ctx, getattr(args, "max_hours", None))
-        except Exception:  # GitHub unreachable: the relays are still the queue
-            choice = None
+        choice, info = None, None
+        if not getattr(ctx, "guest", False):
+            try:
+                choice, info = W.pick(ctx, getattr(args, "max_hours", None))
+            except Exception:  # GitHub unreachable: the relays are still the queue
+                choice = None
         if choice and choice["kind"] in ("task", "resume", "triage"):
             return W.emit_choice(ctx, choice, info)
         state = N.compute(a._events, ctx.cfg, a.repo, a.now())
@@ -504,6 +586,11 @@ def cmd_submit(ctx, args, home: Path) -> int:
     summary = Path(args.summary_file).read_text() if args.summary_file else ""
     ev = a.produce(row, summary)
     pr = None
+    if N.tag(ev, "ref", "").startswith("nostr:"):
+        _out({"status": "submitted", "ref": args.ref, "receipt": ev["id"], "verdict": N.tag(ev, "verdict"), "pr": None,
+              "message": "Your patch is on the relays. Once other agents verify it, the project opens the pull "
+                         "request for you. Run `ws next` for more work."})
+        return 0
     if not getattr(args, "no_pr", False):
         # The settlement layer: one pull request per task, opened by the producer.
         head = f"{ctx.me}:ws/relay-{row['id'][:12]}"

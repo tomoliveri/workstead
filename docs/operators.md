@@ -71,6 +71,7 @@ typos fail loudly. Keys starting with `$` are comments.
 | `relay.claim_window_seconds`, `confirm_delay_seconds` | `60`, `20` | Claim rounds and the wait before working |
 | `relay.lease_minutes`, `max_lease_minutes`, `max_active_leases` | `120`, `720`, `3` | Leases on the relay driver |
 | `relay.pow_bits` | `8` | NIP-13 proof of work on agent events (anti-spam) |
+| `relay.guest.enabled`, `relay.guest.max_patch_kb` | `true`, `256` | Contributions without a GitHub account through the settle workflow's gateway ([relay.md](relay.md#contributing-without-a-github-account)) |
 | `relay.verify_sandbox`, `sandbox_image` | `none`, `python:3.12-slim` | Run verification in a network-less container (`docker`) |
 | `relay.match_test_output` | `false` | Also require identical normalised test output across verifiers |
 | `trust.deny` | `[]` | Logins this project never trusts and never lets claim work |

@@ -49,8 +49,9 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from . import schnorr
 
 K_TASK, K_CLAIM, K_RECEIPT, K_ENDORSE, K_SETTLED, K_PEER = 7651, 7652, 7653, 7654, 7655, 7656
-K_BAN, K_LOGT, K_LOGN, K_LOGD, K_FINDING, K_TOOL = 7657, 7658, 7659, 7660, 7661, 7662
-KINDS = (K_TASK, K_CLAIM, K_RECEIPT, K_ENDORSE, K_SETTLED, K_PEER, K_BAN, K_LOGT, K_LOGN, K_LOGD, K_FINDING, K_TOOL)
+K_BAN, K_LOGT, K_LOGN, K_LOGD, K_FINDING, K_TOOL, K_PATCH = 7657, 7658, 7659, 7660, 7661, 7662, 7663
+KINDS = (K_TASK, K_CLAIM, K_RECEIPT, K_ENDORSE, K_SETTLED, K_PEER, K_BAN, K_LOGT, K_LOGN, K_LOGD, K_FINDING, K_TOOL,
+         K_PATCH)
 APP_TAG = ["t", "workstead"]
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 SHA = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
@@ -241,7 +242,7 @@ def expired(ev: Dict[str, Any], now: int) -> bool:
     return bool(exp and exp.isdigit() and int(exp) < now)
 
 
-REF_RE = re.compile(r"^(https://[A-Za-z0-9._/-]{1,300}|file://[A-Za-z0-9._/~-]{1,300}|/[A-Za-z0-9._/~-]{1,300})#[A-Za-z0-9._/-]{1,200}$")
+REF_RE = re.compile(r"^nostr:[0-9a-f]{64}$|^(https://[A-Za-z0-9._/-]{1,300}|file://[A-Za-z0-9._/~-]{1,300}|/[A-Za-z0-9._/~-]{1,300})#[A-Za-z0-9._/-]{1,200}$")
 
 
 def well_formed(ev: Dict[str, Any], repo_url: str, cfg: Dict[str, Any]) -> bool:
@@ -288,6 +289,9 @@ def well_formed(ev: Dict[str, Any], repo_url: str, cfg: Dict[str, Any]) -> bool:
     if k in (K_LOGT, K_LOGN, K_LOGD):
         from . import logs as _logs
         return _logs.well_formed(ev) and pow_ok(ev, rc["pow_bits"])
+    if k == K_PATCH:
+        from .guest import patch_ok
+        return patch_ok(ev) and pow_ok(ev, rc["pow_bits"])
     if k == K_TOOL:
         from .toolbox import release_ok
         return release_ok(ev)

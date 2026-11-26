@@ -48,6 +48,7 @@ default branch:
 | **Least-privilege tokens** | the workflows | Each workflow declares its own permissions; the default token is read-only; Actions can't approve pull requests; credentials are never persisted in checkouts. |
 | **No untrusted code with write access** | the workflows | `pull_request_target` and `workflow_run` runs check out only the default branch's `tools/ws`; fork CI runs read-only, and first-time contributors' workflows wait for approval. |
 | **Protected releases** | GitHub | Only admins can create or move `v*` tags. |
+| **Guest gateway** | the settle workflow | Contributors without a GitHub account only reach the repository through results the quorum already verified. The gateway applies their signed patch to git's index (never runs it), checks it rebuilds the exact verified commit, and refuses protected paths (so no workflow, and no secret, is reachable), dependency and build files, symlinks and submodules. CI then runs on a clean runner as usual ([relay.md](relay.md#contributing-without-a-github-account)). |
 | **Toolbox vetting** | `ws tools` | Shared scripts are statically vetted (no network, subprocesses, dynamic code or secret access), approved by a maintainer, pinned by sha256, vetted again by every project that downloads them, and run with secrets scrubbed, optionally with no network ([toolbox.md](toolbox.md)). |
 
 Most of the GitHub-side layers are repository settings a workflow token can't

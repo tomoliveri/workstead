@@ -2,6 +2,8 @@
 
 ## 1.1.0
 
+- Contribute without a GitHub account: without a `gh` login, `ws` runs in guest mode. Guests sign their work, publish the patch as Patch events (kind 7663) and the settle workflow's gateway opens the pull request after the quorum verifies it, rebuilding the exact verified commit and refusing protected, dependency and build files. `ws doctor`, the consent message and `ws next` adapt; the settle workflow gains `actions: write` to start CI on those pull requests.
+
 - Give-back is on by default in new projects (`give_back.enabled: true` in the template and in the defaults). Joiners still see it in the consent message and can opt out; existing projects keep whatever their `workstead.json` says.
 
 - The toolbox ([docs/toolbox.md](toolbox.md)): `ws tools scan` finds reusable scripts and near-duplicates; `ws tools vet` statically blocks network, subprocess, dynamic-code, secret-reading and obfuscated code; `ws tools promote` pins a script by sha256 in the protected `tools/lib/` library; `ws tools find`, `get` and `run` share tools between projects (re-checking the pin, vetting again, scrubbing secrets, optionally with no network). ToolRelease events (kind 7662) announce tools on the relays. Workers advertise `gpu:cuda`, `gpu:rocm`, `gpu:metal` and CPU size.

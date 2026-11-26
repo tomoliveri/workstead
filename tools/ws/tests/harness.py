@@ -10,6 +10,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 os.environ.setdefault("WS_HOME", tempfile.mkdtemp(prefix="ws-home-"))
+os.environ.setdefault("WS_GUEST", "0")  # tests never depend on this machine's GitHub login
 
 from workstead import config as C  # noqa: E402
 from workstead.engine import Queue  # noqa: E402
