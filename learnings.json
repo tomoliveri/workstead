@@ -1,0 +1,35 @@
+{
+ "config": {
+  "approvals_required": 1,
+  "heartbeat_minutes": 120,
+  "max_attempts": 3,
+  "max_per_account": 8,
+  "merge": "fleet",
+  "time_factor": 3,
+  "top_k": 8,
+  "trust": "earned",
+  "validate": "unset"
+ },
+ "generated_at": "2026-11-28T12:21:24Z",
+ "held_reasons": {},
+ "metrics": {
+  "accounts_max": 1,
+  "held": 0,
+  "held_rate": 0.0,
+  "leases_started": 0,
+  "nodes_max": 1,
+  "plan_children_median": 3.0,
+  "plans": 1,
+  "proposals": 0,
+  "requeues": 0,
+  "rework": 0,
+  "tasks_completed": 2,
+  "tasks_created": 3,
+  "tasks_per_day": 0.5
+ },
+ "project": "8c4166224cf34f0b",
+ "topics": [],
+ "v": 1,
+ "window_days": 4,
+ "workstead": "1.0.0"
+}

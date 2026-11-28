@@ -1,0 +1,182 @@
+{
+ "cache": {
+  "3": {
+   "approvals": 0,
+   "attempts": 0,
+   "children": [
+    4,
+    5,
+    6
+   ],
+   "labels": [
+    "p:plan",
+    "ws:job",
+    "ws:split",
+    "ws:task"
+   ],
+   "lease": null,
+   "pr": null,
+   "reason": "",
+   "review_lease": null,
+   "status": "split",
+   "updated_at": "2026-11-25T03:07:48Z"
+  },
+  "6": {
+   "attempts": 0,
+   "labels": [
+    "p:research",
+    "ws:ready",
+    "ws:task"
+   ],
+   "status": "queued",
+   "updated_at": "2026-11-25T23:08:09Z"
+  }
+ },
+ "finished": false,
+ "fleet_learnings": {
+  "fleets": 0,
+  "signals": []
+ },
+ "generated_at": "2026-11-28T12:21:22Z",
+ "held_only": false,
+ "learn": {
+  "days": {
+   "2026-11-25": {
+    "accounts_max": 1,
+    "nodes_max": 1,
+    "plans": 1,
+    "tasks_completed": 1,
+    "tasks_created": 3
+   },
+   "2026-11-26": {
+    "accounts_max": 0,
+    "nodes_max": 0,
+    "tasks_completed": 1
+   },
+   "2026-11-27": {
+    "accounts_max": 0,
+    "nodes_max": 0,
+    "tasks_completed": 0
+   },
+   "2026-11-28": {
+    "accounts_max": 0,
+    "nodes_max": 0,
+    "tasks_completed": 0
+   }
+  },
+  "project_id": "8c4166224cf34f0b",
+  "samples": {
+   "est_ratio": [],
+   "lease_hours": [],
+   "plan_children": [
+    3.0
+   ]
+  }
+ },
+ "learnings_topics": [],
+ "nodes": [],
+ "repo": "tomoliveri/workstead",
+ "reviews": [],
+ "stats": {
+  "by_partition": {
+   "plan": 1,
+   "research": 1
+  },
+  "by_status": {
+   "ready": 1,
+   "split": 1
+  },
+  "done_24h": 0,
+  "done_7d": 2,
+  "eta_days": 7.0,
+  "open_tasks": 2,
+  "remaining_est_hours": 0.5,
+  "tasks_per_day": 0.3
+ },
+ "tasks": [
+  {
+   "attempts": 0,
+   "author": "tomoliveri",
+   "children": [
+    4,
+    5,
+    6
+   ],
+   "code": "R",
+   "created_at": "2026-11-25T03:06:01Z",
+   "labels": [
+    "ws:task",
+    "ws:job",
+    "ws:split",
+    "p:plan"
+   ],
+   "lease": null,
+   "meta": {
+    "after": "ok",
+    "deps": [],
+    "depth": 0,
+    "est_hours": 1.0,
+    "features": [],
+    "found_in": null,
+    "job": 3,
+    "licenses": [],
+    "origin": "job",
+    "parent": null,
+    "partition": "plan",
+    "plan_ref": null,
+    "priority": 5,
+    "source": null,
+    "topics": [],
+    "v": 1
+   },
+   "number": 3,
+   "pr": null,
+   "ready": false,
+   "reason": "",
+   "review_lease": null,
+   "status": "split",
+   "title": "Job: add an FAQ to the docs"
+  },
+  {
+   "attempts": 0,
+   "author": "github-actions[bot]",
+   "children": [],
+   "code": "PD",
+   "created_at": "2026-11-25T03:07:43Z",
+   "labels": [
+    "ws:task",
+    "ws:ready",
+    "p:research"
+   ],
+   "lease": null,
+   "meta": {
+    "after": "ok",
+    "deps": [
+     5
+    ],
+    "depth": 1,
+    "est_hours": 0.5,
+    "features": [],
+    "found_in": null,
+    "job": 3,
+    "licenses": [],
+    "origin": "plan",
+    "parent": 3,
+    "partition": "research",
+    "plan_ref": "3/7151612345/verify",
+    "priority": 5,
+    "source": null,
+    "topics": [],
+    "v": 1
+   },
+   "number": 6,
+   "pr": null,
+   "ready": true,
+   "reason": "",
+   "review_lease": null,
+   "status": "queued",
+   "title": "Verify the FAQ against the code and docs"
+  }
+ ],
+ "v": 1
+}
